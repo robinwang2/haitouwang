@@ -1,0 +1,547 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.haitouwang.example/events/v1",
+  "title": "HaiTouWang event envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "specversion",
+    "id",
+    "type",
+    "source",
+    "subject",
+    "time",
+    "datacontenttype",
+    "dataschema",
+    "tenant_id",
+    "correlation_id",
+    "data"
+  ],
+  "properties": {
+    "specversion": {
+      "const": "1.0"
+    },
+    "id": {
+      "$ref": "#/$defs/Uuid"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "profile.fact.changed.v1",
+        "material.reviewed.v1",
+        "job.normalized.v1",
+        "review.completed.v1",
+        "agent.status_changed.v1",
+        "agent.command_rejected.v1",
+        "application.state_changed.v1",
+        "application.manual_intervention_required.v1",
+        "task.state_changed.v1",
+        "notification.requested.v1",
+        "interview.changed.v1",
+        "analytics.metric_recorded.v1",
+        "authorization.revoked.v1",
+        "audit.action_recorded.v1"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 512
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "time": {
+      "$ref": "#/$defs/Timestamp"
+    },
+    "datacontenttype": {
+      "const": "application/json"
+    },
+    "dataschema": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "/events/v1$"
+    },
+    "tenant_id": {
+      "$ref": "#/$defs/Uuid"
+    },
+    "correlation_id": {
+      "$ref": "#/$defs/Uuid"
+    },
+    "causation_id": {
+      "$ref": "#/$defs/Uuid"
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^[\\da-f]{2}-[\\da-f]{32}-[\\da-f]{16}-[\\da-f]{2}$"
+    },
+    "data": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "profile.fact.changed.v1",
+              "material.reviewed.v1",
+              "job.normalized.v1",
+              "review.completed.v1",
+              "agent.status_changed.v1",
+              "task.state_changed.v1",
+              "interview.changed.v1",
+              "authorization.revoked.v1"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/ResourceStateChangedData"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "application.state_changed.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/ApplicationStateChangedData"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "agent.command_rejected.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/AgentCommandRejectedData"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "application.manual_intervention_required.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/ManualInterventionData"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "notification.requested.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/NotificationRequestedData"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "analytics.metric_recorded.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/MetricRecordedData"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "audit.action_recorded.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/AuditData"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ResourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "user",
+            "goal",
+            "fact",
+            "file",
+            "material",
+            "job",
+            "score",
+            "review",
+            "agent",
+            "application",
+            "task",
+            "notification",
+            "interview",
+            "metric"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "Actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["user", "agent", "service", "system"]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "ManualReason": {
+      "type": "string",
+      "enum": [
+        "captcha",
+        "assessment",
+        "video_interview",
+        "electronic_signature",
+        "unknown_required_field",
+        "legal_or_identity_question",
+        "work_authorization_ambiguous",
+        "page_structure_changed",
+        "submission_result_uncertain",
+        "credential_required",
+        "policy_blocked",
+        "evidence_conflict"
+      ]
+    },
+    "ResourceStateChangedData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource", "from_status", "to_status", "reason_code", "actor"],
+      "properties": {
+        "resource": {
+          "$ref": "#/$defs/ResourceRef"
+        },
+        "from_status": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "to_status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "reason_code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        }
+      }
+    },
+    "SubmissionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "captured_at", "target_origin", "verified"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["confirmation_number", "redacted_screenshot", "success_page_fingerprint", "manual_attestation"]
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "captured_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "target_origin": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ApplicationStateChangedData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["application_id", "from_status", "to_status", "reason_code", "actor", "application_version", "evidence"],
+      "properties": {
+        "application_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "from_status": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "to_status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "materials_ready",
+            "approved",
+            "queued",
+            "filling",
+            "awaiting_confirmation",
+            "submitted_pending_verification",
+            "manual_required",
+            "submitted",
+            "interview",
+            "rejected",
+            "offer",
+            "withdrawn",
+            "cancelled"
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        },
+        "application_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/SubmissionEvidence"
+          }
+        }
+      }
+    },
+    "AgentCommandRejectedData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_id", "command_id", "error_code", "security_relevant", "rejected_at"],
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "command_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "error_code": {
+          "type": "string",
+          "enum": [
+            "TOKEN_EXPIRED",
+            "TOKEN_REVOKED",
+            "TOKEN_SCOPE_INSUFFICIENT",
+            "REPLAY_DETECTED",
+            "STATE_TRANSITION_INVALID",
+            "CREDENTIAL_DATA_FORBIDDEN"
+          ]
+        },
+        "security_relevant": {
+          "type": "boolean"
+        },
+        "rejected_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "ManualInterventionData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["application_id", "task_id", "agent_id", "manual_reason", "recovery_action", "evidence_refs"],
+      "properties": {
+        "application_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "task_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "agent_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "manual_reason": {
+          "$ref": "#/$defs/ManualReason"
+        },
+        "recovery_action": {
+          "type": "string",
+          "enum": ["user_complete_locally", "user_answer_required", "re_pair_agent", "verify_submission_result", "review_policy"]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/ResourceRef"
+          }
+        }
+      }
+    },
+    "NotificationRequestedData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["notification_id", "notification_type", "channel", "dedupe_key", "source_ref"],
+      "properties": {
+        "notification_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "notification_type": {
+          "type": "string",
+          "enum": ["high_match", "review_required", "login_expired", "task_failed", "deadline_due", "daily_report"]
+        },
+        "channel": {
+          "type": "string",
+          "enum": ["in_app", "email"]
+        },
+        "dedupe_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "source_ref": {
+          "$ref": "#/$defs/ResourceRef"
+        }
+      }
+    },
+    "MetricRecordedData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_id", "definition_id", "definition_version", "value", "sample_size", "period_start", "period_end"],
+      "properties": {
+        "metric_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "definition_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "definition_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "value": {
+          "type": "number"
+        },
+        "sample_size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "period_start": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "period_end": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "AuditData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["audit_event_id", "actor", "action", "resource", "outcome", "request_id", "changed_fields"],
+      "properties": {
+        "audit_event_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "actor": {
+          "$ref": "#/$defs/Actor"
+        },
+        "action": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]{2,127}$"
+        },
+        "resource": {
+          "$ref": "#/$defs/ResourceRef"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["succeeded", "rejected", "failed", "manual_intervention"]
+        },
+        "reason_code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "request_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "changed_fields": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      }
+    }
+  }
+}
