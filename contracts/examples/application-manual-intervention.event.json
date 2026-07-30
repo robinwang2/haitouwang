@@ -1,0 +1,27 @@
+{
+  "specversion": "1.0",
+  "id": "20000000-0000-4000-8000-000000000003",
+  "type": "application.manual_intervention_required.v1",
+  "source": "https://api.haitouwang.example/applications",
+  "subject": "applications/30000000-0000-4000-8000-000000000001",
+  "time": "2026-07-30T23:55:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://contracts.haitouwang.example/events/v1",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "correlation_id": "40000000-0000-4000-8000-000000000003",
+  "causation_id": "70000000-0000-4000-8000-000000000002",
+  "data": {
+    "application_id": "30000000-0000-4000-8000-000000000001",
+    "task_id": "80000000-0000-4000-8000-000000000001",
+    "agent_id": "60000000-0000-4000-8000-000000000001",
+    "manual_reason": "work_authorization_ambiguous",
+    "recovery_action": "user_answer_required",
+    "evidence_refs": [
+      {
+        "type": "task",
+        "id": "80000000-0000-4000-8000-000000000001",
+        "version": 3
+      }
+    ]
+  }
+}

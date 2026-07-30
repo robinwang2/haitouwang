@@ -1,0 +1,33 @@
+{
+  "specversion": "1.0",
+  "id": "20000000-0000-4000-8000-000000000001",
+  "type": "application.state_changed.v1",
+  "source": "https://api.haitouwang.example/applications",
+  "subject": "applications/30000000-0000-4000-8000-000000000001",
+  "time": "2026-07-30T23:45:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://contracts.haitouwang.example/events/v1",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "correlation_id": "40000000-0000-4000-8000-000000000001",
+  "causation_id": "50000000-0000-4000-8000-000000000001",
+  "data": {
+    "application_id": "30000000-0000-4000-8000-000000000001",
+    "from_status": "submitted_pending_verification",
+    "to_status": "submitted",
+    "reason_code": "confirmation_number_verified",
+    "actor": {
+      "type": "agent",
+      "id": "60000000-0000-4000-8000-000000000001"
+    },
+    "application_version": 8,
+    "evidence": [
+      {
+        "type": "confirmation_number",
+        "reference": "GH-EXAMPLE-1042",
+        "captured_at": "2026-07-30T23:44:59Z",
+        "target_origin": "https://boards.greenhouse.io/",
+        "verified": true
+      }
+    ]
+  }
+}
