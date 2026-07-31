@@ -67,8 +67,11 @@ function redactThumbprint(value: string): string {
   return `${value.slice(0, 8)}…${value.slice(-6)}`;
 }
 
-function assertAudit(eventId: string | undefined): asserts eventId is string {
-  if (!eventId) {
+function assertAudit(receipt: {
+  readonly eventId?: string;
+  readonly outcome?: string;
+}): asserts receipt is { readonly eventId: string; readonly outcome: 'succeeded' } {
+  if (!receipt.eventId || receipt.outcome !== 'succeeded') {
     throw new Error('服务未返回审计回执，请刷新确认最终状态后再操作。');
   }
 }
@@ -228,7 +231,7 @@ export function ConnectionsPanel({
         publicKeyThumbprint: pairing.publicKeyThumbprint,
         approved: true,
       });
-      assertAudit(result.audit.eventId);
+      assertAudit(result.audit);
       setSnapshot(result.snapshot);
       setPairing(null);
       setMessage(`设备已配对，审计记录 ${result.audit.eventId} 已写入。`);
@@ -250,7 +253,7 @@ export function ConnectionsPanel({
         affectedTasksAcknowledged: true,
         confirmedAt: new Date().toISOString(),
       });
-      assertAudit(result.audit.eventId);
+      assertAudit(result.audit);
       setSnapshot(result.snapshot);
       setMessage(`代理授权已撤销，审计记录 ${result.audit.eventId} 已写入。`);
       setRevokeOpen(false);

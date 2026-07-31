@@ -1,4 +1,9 @@
-import { createSafeAutomationSnapshot, enforceSafeSnapshot, validateLimits } from './policy';
+import {
+  MUTABLE_CAPABILITIES,
+  createSafeAutomationSnapshot,
+  enforceSafeSnapshot,
+  validateLimits,
+} from './policy';
 import type {
   AuditReceipt,
   AutomationChange,
@@ -20,6 +25,15 @@ function assertConfirmed(request: ConfirmedAutomationChange): void {
     Number.isNaN(Date.parse(request.confirmation.confirmedAt))
   ) {
     throw new Error('高风险变更缺少有效的显式确认。');
+  }
+}
+
+function assertMutableCapability(change: AutomationChange): void {
+  if (
+    change.kind === 'capability' &&
+    !MUTABLE_CAPABILITIES.some((capability) => capability === String(change.capability))
+  ) {
+    throw new Error('MVP 提交能力固定关闭，不能通过设置变更开启。');
   }
 }
 
@@ -84,6 +98,7 @@ export function createAutomationMockGateway(
 
     async applyConfirmedChange(request) {
       assertConfirmed(request);
+      assertMutableCapability(request.change);
       if (request.expectedRevision !== snapshot.revision) {
         throw new Error('设置已在其他会话更新，请刷新后重试。');
       }

@@ -30,8 +30,11 @@ const DEFAULT_PERMISSION: AutomationPermission = {
   canOperateAgent: true,
 };
 
-function assertAudit(eventId: string | undefined): asserts eventId is string {
-  if (!eventId) {
+function assertAudit(receipt: {
+  readonly eventId?: string;
+  readonly outcome?: string;
+}): asserts receipt is { readonly eventId: string; readonly outcome: 'succeeded' } {
+  if (!receipt.eventId || receipt.outcome !== 'succeeded') {
     throw new Error('服务未返回审计回执，人工任务状态未在本页更新。');
   }
 }
@@ -83,7 +86,7 @@ export function ManualTakeoverPanel({
     setMessage(null);
     try {
       const result = await gateway.resolveTakeoverTask(selected.id, pending.resolution);
-      assertAudit(result.audit.eventId);
+      assertAudit(result.audit);
       setTasks((current) =>
         current.map((task) => (task.id === result.task.id ? result.task : task)),
       );
