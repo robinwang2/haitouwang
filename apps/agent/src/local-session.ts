@@ -43,6 +43,13 @@ export class LocalBrowserSession {
     }
     const page = this.browserContext.pages()[0] ?? (await this.browserContext.newPage());
     await page.goto(parsed.href, { waitUntil: 'domcontentloaded' });
+    const finalUrl = new URL(page.url());
+    if (
+      finalUrl.protocol !== 'https:' &&
+      !(this.allowHttpForTesting && finalUrl.protocol === 'http:')
+    ) {
+      throw new Error('Target page redirected to a non-HTTPS URL.');
+    }
     return new PlaywrightApplicationPage(page, {
       ...(this.submissionTimeoutMs === undefined
         ? {}

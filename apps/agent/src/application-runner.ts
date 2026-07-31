@@ -43,15 +43,18 @@ function manual(manualReason: ManualReason): ManualIntervention {
 
 function stableInspectionHash(inspection: PageInspection): string {
   const shape = inspection.controls
-    .filter((control) => control.visible && !control.disabled && control.kind !== 'hidden')
     .map((control) => ({
       id: control.id,
       kind: control.kind,
       name: control.name,
       label: control.label,
       required: control.required,
+      disabled: control.disabled,
+      visible: control.visible,
       options: [...control.options],
+      accept: control.accept,
       valuePresent: control.valuePresent,
+      stateDigest: control.stateDigest,
     }))
     .sort((left, right) => left.id.localeCompare(right.id));
 

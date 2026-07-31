@@ -64,6 +64,8 @@ export interface DetectedControl {
   options: readonly string[];
   accept?: string;
   valuePresent: boolean;
+  /** Keyed, local-only digest of the current value or selected-file state. */
+  stateDigest: string;
 }
 
 export interface PageInspection {

@@ -91,6 +91,14 @@ class FixturePage implements ApplicationPage {
           ? { accept: element.getAttribute('accept') ?? undefined }
           : {}),
         valuePresent: this.values.has(id) || this.uploads.has(id),
+        stateDigest: createHash('sha256')
+          .update(
+            JSON.stringify({
+              value: this.values.get(id),
+              upload: this.uploads.get(id),
+            }),
+          )
+          .digest('hex'),
       };
     });
     const platform = this.document.querySelector('form')?.getAttribute('data-platform');
@@ -315,6 +323,56 @@ describe('LocalApplicationRunner fixed fixtures', () => {
       materials: { resume: RESUME_PATH },
     });
     if (fill.state !== 'awaiting_confirmation') throw new Error('expected preview');
+
+    await expect(runner.submit(fill.preview, grant(fill.preview.hash))).resolves.toMatchObject({
+      state: 'manual_intervention_required',
+      manualReason: 'page_structure_changed',
+    });
+    expect(page.submitCount).toBe(0);
+  });
+
+  it('invalidates confirmation when a non-empty field is replaced with another value', async () => {
+    const page = new FixturePage(fixture('greenhouse.html'), 'confirmed');
+    const runner = new LocalApplicationRunner(page, new OneTimeVerifier(), () => NOW);
+    const fill = await runner.fill({
+      answers: {
+        first_name: 'Ada',
+        last_name: 'Lovelace',
+        email: 'approved@example.test',
+        phone: '+1 555 0100',
+      },
+      materials: { resume: RESUME_PATH },
+    });
+    if (fill.state !== 'awaiting_confirmation') throw new Error('expected preview');
+    const inspection = await page.inspect();
+    const email = inspection.controls.find((control) => control.name.includes('email'));
+    if (!email) throw new Error('expected email control');
+    page.values.set(email.id, 'altered@example.test');
+
+    await expect(runner.submit(fill.preview, grant(fill.preview.hash))).resolves.toMatchObject({
+      state: 'manual_intervention_required',
+      manualReason: 'page_structure_changed',
+    });
+    expect(page.submitCount).toBe(0);
+  });
+
+  it('invalidates confirmation when the selected upload changes', async () => {
+    const page = new FixturePage(fixture('greenhouse.html'), 'confirmed');
+    const runner = new LocalApplicationRunner(page, new OneTimeVerifier(), () => NOW);
+    const fill = await runner.fill({
+      answers: {
+        first_name: 'Ada',
+        last_name: 'Lovelace',
+        email: 'ada@example.test',
+        phone: '+1 555 0100',
+      },
+      materials: { resume: RESUME_PATH },
+    });
+    if (fill.state !== 'awaiting_confirmation') throw new Error('expected preview');
+    const inspection = await page.inspect();
+    const resume = inspection.controls.find((control) => control.name.includes('resume'));
+    if (!resume) throw new Error('expected resume control');
+    page.uploads.set(resume.id, 'locally-replaced-resume.pdf');
 
     await expect(runner.submit(fill.preview, grant(fill.preview.hash))).resolves.toMatchObject({
       state: 'manual_intervention_required',

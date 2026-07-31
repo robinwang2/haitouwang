@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 
 import type { Locator, Page } from 'playwright';
 
@@ -27,6 +27,7 @@ interface RawControl {
   options: string[];
   accept?: string;
   valuePresent: boolean;
+  state: string;
 }
 
 const CAPTCHA_SELECTOR = [
@@ -62,7 +63,7 @@ function kindOf(raw: RawControl): ControlKind {
   return 'text';
 }
 
-function toControl(raw: RawControl): DetectedControl {
+function toControl(raw: RawControl, stateDigestKey: Buffer): DetectedControl {
   return {
     id: raw.id,
     kind: kindOf(raw),
@@ -74,6 +75,7 @@ function toControl(raw: RawControl): DetectedControl {
     options: raw.options,
     ...(raw.accept ? { accept: raw.accept } : {}),
     valuePresent: raw.valuePresent,
+    stateDigest: createHmac('sha256', stateDigestKey).update(raw.state).digest('hex'),
   };
 }
 
@@ -100,6 +102,7 @@ export interface PlaywrightApplicationPageOptions {
 export class PlaywrightApplicationPage implements ApplicationPage {
   private readonly controls = new Map<string, Locator>();
   private readonly submissionTimeoutMs: number;
+  private readonly stateDigestKey = randomBytes(32);
 
   constructor(
     private readonly page: Page,
@@ -170,6 +173,19 @@ export class PlaywrightApplicationPage implements ApplicationPage {
             : type === 'file'
               ? Boolean((control as HTMLInputElement).files?.length)
               : Boolean(control.value);
+        const state =
+          type === 'checkbox' || type === 'radio'
+            ? JSON.stringify({ checked: (control as HTMLInputElement).checked })
+            : type === 'file'
+              ? JSON.stringify(
+                  [...((control as HTMLInputElement).files ?? [])].map((file) => ({
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                    lastModified: file.lastModified,
+                  })),
+                )
+              : JSON.stringify({ value: control.value });
         return {
           id,
           tag,
@@ -182,6 +198,7 @@ export class PlaywrightApplicationPage implements ApplicationPage {
           options,
           accept: element.getAttribute('accept') ?? undefined,
           valuePresent,
+          state,
         };
       }),
     );
@@ -206,7 +223,7 @@ export class PlaywrightApplicationPage implements ApplicationPage {
     return {
       url: this.page.url(),
       platform: detectPlatform(this.page.url(), rawControls, formSignals),
-      controls: rawControls.map(toControl),
+      controls: rawControls.map((raw) => toControl(raw, this.stateDigestKey)),
       hazards,
     };
   }
@@ -234,16 +251,17 @@ export class PlaywrightApplicationPage implements ApplicationPage {
   }
 
   async submitOnce(): Promise<SubmissionObservation> {
-    const submit = this.page.locator('button[type="submit"], input[type="submit"]').first();
-    if (
-      (await submit.count()) !== 1 ||
-      !(await submit.isVisible()) ||
-      !(await submit.isEnabled())
-    ) {
+    const submitControls = this.page.locator('button[type="submit"], input[type="submit"]');
+    const visibleSubmits: Locator[] = [];
+    for (let index = 0; index < (await submitControls.count()); index += 1) {
+      const candidate = submitControls.nth(index);
+      if (await candidate.isVisible()) visibleSubmits.push(candidate);
+    }
+    if (visibleSubmits.length !== 1 || !(await visibleSubmits[0]!.isEnabled())) {
       return { kind: 'uncertain' };
     }
 
-    await submit.click({ noWaitAfter: true });
+    await visibleSubmits[0]!.click({ noWaitAfter: true });
     await this.page
       .waitForLoadState('domcontentloaded', { timeout: this.submissionTimeoutMs })
       .catch(() => undefined);
