@@ -15,8 +15,8 @@ function fixture() {
     sequence += 1;
     return {
       actor_id: user,
-      request_id: `request-${sequence}`,
-      correlation_id: `correlation-${sequence}`,
+      request_id: randomUUID(),
+      correlation_id: randomUUID(),
       idempotency_key: `profile-test-key-${sequence.toString().padStart(6, '0')}`,
     };
   };
@@ -83,6 +83,13 @@ describe('ProfileService goals', () => {
     equal(service.listGoals(userId, true).length, 1);
     const actions = service.listAuditEvents(userId).map((event) => event.action);
     deepEqual(actions, ['goal.created', 'goal.created', 'goal.updated', 'goal.deleted']);
+    const updateAudit = service
+      .listAuditEvents(userId)
+      .find((event) => event.action === 'goal.updated');
+    equal(updateAudit?.from_status, 'active');
+    equal(updateAudit?.to_status, 'paused');
+    equal('before_status' in (updateAudit ?? {}), false);
+    equal('after_status' in (updateAudit ?? {}), false);
   });
 });
 
@@ -139,7 +146,7 @@ describe('ProfileService facts', () => {
       source: { type: 'user' as const, reference: 'profile-form' },
     };
     const pending = service.createFact(userId, { ...base, scope: { use: 'all_goals' } }, context());
-    const expired = service.createFact(
+    const timeRestricted = service.createFact(
       userId,
       {
         ...base,
@@ -176,11 +183,39 @@ describe('ProfileService facts', () => {
       },
       context(),
     );
+    const explicitlyExpiredSource = service.createFact(
+      userId,
+      {
+        ...base,
+        scope: { use: 'all_goals' },
+        user_confirmed: true,
+      },
+      context(),
+    );
+    const explicitlyExpired = service.expireFact(
+      userId,
+      explicitlyExpiredSource.id,
+      explicitlyExpiredSource.version,
+      context(),
+    );
+    const rejectedSource = service.createFact(
+      userId,
+      { ...base, scope: { use: 'all_goals' } },
+      context(),
+    );
+    const rejected = service.rejectFact(
+      userId,
+      rejectedSource.id,
+      rejectedSource.version,
+      context(),
+    );
 
     equal(service.isFactUsable(userId, pending.id, selectedGoal.id), false);
-    equal(service.isFactUsable(userId, expired.id, selectedGoal.id), false);
+    equal(service.isFactUsable(userId, timeRestricted.id, selectedGoal.id), false);
     equal(service.isFactUsable(userId, prohibited.id, selectedGoal.id), false);
     equal(service.isFactUsable(userId, manual.id, selectedGoal.id), false);
+    equal(service.isFactUsable(userId, explicitlyExpired.id, selectedGoal.id), false);
+    equal(service.isFactUsable(userId, rejected.id, selectedGoal.id), false);
     equal(service.isFactUsable(userId, selected.id, selectedGoal.id), true);
     equal(service.isFactUsable(userId, selected.id, otherGoal.id), false);
     deepEqual(
@@ -312,6 +347,7 @@ describe('ProfileService resume files, export and deletion', () => {
     equal(service.listGoals(otherUserId, true).length, 1);
     const finalAudit = service.listAuditEvents(userId).at(-1);
     equal(finalAudit?.action, 'profile.deleted');
+    equal(finalAudit?.resource.type, 'user');
     equal(JSON.stringify(finalAudit).includes('private summary'), false);
   });
 });
@@ -321,8 +357,8 @@ describe('ProfileService idempotency', () => {
     const { userId, service } = fixture();
     const context: MutationContext = {
       actor_id: userId,
-      request_id: 'request-idempotency',
-      correlation_id: 'correlation-idempotency',
+      request_id: randomUUID(),
+      correlation_id: randomUUID(),
       idempotency_key: 'same-idempotency-key-0001',
     };
     const input = {
@@ -360,5 +396,45 @@ describe('ProfileService idempotency', () => {
     );
     notEqual(first.id, randomUUID());
     match(first.id, /^[0-9a-f-]{36}$/);
+  });
+});
+
+describe('ProfileService validation', () => {
+  it('returns domain validation errors for malformed runtime inputs', () => {
+    const { userId, service, context } = fixture();
+    throws(
+      () =>
+        service.createGoal(
+          userId,
+          {
+            name: 'Backend',
+            title_keywords: ['Backend Engineer'],
+            locations: ['Remote'],
+            employment_types: ['full_time'],
+            status: 'active',
+          },
+          { ...context(), request_id: 'not-a-uuid' },
+        ),
+      (error: unknown) =>
+        error instanceof ProfileError && error.code === 'VALIDATION_FAILED' && error.status === 400,
+    );
+    throws(
+      () => service.createFileMetadata(userId, null as never, context()),
+      (error: unknown) => error instanceof ProfileError && error.code === 'VALIDATION_FAILED',
+    );
+    throws(
+      () =>
+        service.createFact(
+          userId,
+          {
+            kind: 'skill',
+            value: { name: 'TypeScript' },
+            scope: { use: 'selected_goals', goal_ids: 'not-an-array' as never },
+            source: { type: 'user', reference: 'profile-form' },
+          },
+          context(),
+        ),
+      (error: unknown) => error instanceof ProfileError && error.code === 'VALIDATION_FAILED',
+    );
   });
 });

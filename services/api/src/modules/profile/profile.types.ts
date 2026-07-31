@@ -149,17 +149,17 @@ export interface AuditEvent {
   occurred_at: string;
   actor: { type: 'user' | 'system'; id: string };
   action: string;
-  resource: { type: 'goal' | 'fact' | 'file' | 'profile'; id: Uuid };
-  outcome: 'succeeded' | 'rejected';
+  resource: { type: 'user' | 'goal' | 'fact' | 'file'; id: Uuid; version?: number };
+  outcome: 'succeeded' | 'rejected' | 'failed' | 'manual_intervention';
   tenant_id: Uuid;
   request_id: string;
   correlation_id: string;
   causation_id?: string;
-  before_status?: string;
-  after_status?: string;
+  from_status?: string | null;
+  to_status?: string | null;
   changed_fields: string[];
   reason_code?: string;
-  replay_of?: Uuid;
+  replayed_from_event_id?: Uuid;
 }
 
 export interface VersionRecord<T> {

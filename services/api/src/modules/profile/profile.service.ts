@@ -653,7 +653,7 @@ export class ProfileService {
         audit: this.listAuditEvents(userId),
       },
       audit: {
-        resourceType: 'profile',
+        resourceType: 'user',
         resourceId: userId,
         action: 'profile.exported',
         changedFields: [],
@@ -690,7 +690,7 @@ export class ProfileService {
           files: fileIds.length,
         },
         audit: {
-          resourceType: 'profile',
+          resourceType: 'user',
           resourceId: userId,
           action: 'profile.deleted',
           changedFields: ['goals', 'facts', 'files'],
@@ -788,8 +788,8 @@ export class ProfileService {
       correlation_id: context.correlation_id,
       changed_fields: [...new Set(change.changedFields)].sort(),
       ...(context.causation_id ? { causation_id: context.causation_id } : {}),
-      ...(change.beforeStatus ? { before_status: change.beforeStatus } : {}),
-      ...(change.afterStatus ? { after_status: change.afterStatus } : {}),
+      ...(change.beforeStatus ? { from_status: change.beforeStatus } : {}),
+      ...(change.afterStatus ? { to_status: change.afterStatus } : {}),
     };
     this.store.auditEvents.push(clone(event));
     return event;
@@ -886,6 +886,9 @@ export class ProfileService {
 
   private validateUserAndContext(userId: string, context: MutationContext): void {
     this.validateUuid(userId, 'user_id');
+    if (!isRecord(context)) {
+      throw this.validation('Mutation context is required.');
+    }
     if (context.actor_id !== userId) {
       throw new ProfileError(
         'VALIDATION_FAILED',
@@ -894,13 +897,18 @@ export class ProfileService {
       );
     }
     if (
-      !context.request_id ||
-      !context.correlation_id ||
+      typeof context.request_id !== 'string' ||
+      !UUID_PATTERN.test(context.request_id) ||
+      typeof context.correlation_id !== 'string' ||
+      !UUID_PATTERN.test(context.correlation_id) ||
+      (context.causation_id !== undefined &&
+        (typeof context.causation_id !== 'string' || !UUID_PATTERN.test(context.causation_id))) ||
+      typeof context.idempotency_key !== 'string' ||
       !IDEMPOTENCY_KEY_PATTERN.test(context.idempotency_key)
     ) {
       throw new ProfileError(
         'VALIDATION_FAILED',
-        'Mutation context and a 16-128 character idempotency key are required.',
+        'Mutation context UUIDs and a 16-128 character idempotency key are required.',
         400,
       );
     }
@@ -1063,9 +1071,10 @@ export class ProfileService {
     }
     const goalIds = input.scope.goal_ids ?? [];
     if (
+      !Array.isArray(goalIds) ||
       goalIds.length > 100 ||
       new Set(goalIds).size !== goalIds.length ||
-      goalIds.some((id) => !UUID_PATTERN.test(id))
+      goalIds.some((id) => typeof id !== 'string' || !UUID_PATTERN.test(id))
     ) {
       throw this.validation('scope goal_ids is invalid.');
     }
@@ -1090,6 +1099,9 @@ export class ProfileService {
   }
 
   private validateFileInput(input: CreateFileMetadataInput): void {
+    if (!isRecord(input)) {
+      throw this.validation('file metadata must be an object.');
+    }
     const purposes = new Set([
       'resume_source',
       'resume_output',
