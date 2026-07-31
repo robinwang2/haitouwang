@@ -1,0 +1,27 @@
+{
+  "source": "manual_url",
+  "url": "https://careers.example.org/jobs/data-engineer?ref=user",
+  "fetched_at": "2026-07-18T09:30:00.000Z",
+  "payload": {
+    "@context": "https://schema.org",
+    "@type": "JobPosting",
+    "identifier": "DATA-7",
+    "title": "Data Engineer",
+    "url": "https://careers.example.org/jobs/data-engineer?ref=user",
+    "hiringOrganization": {
+      "@type": "Organization",
+      "name": "Example Org"
+    },
+    "jobLocation": {
+      "@type": "Place",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Seattle",
+        "addressRegion": "WA"
+      }
+    },
+    "employmentType": "CONTRACTOR",
+    "description": "Design governed batch and streaming data pipelines, maintain schema evolution and observability, collaborate with analytics and application teams, document operational playbooks, and improve the reliability of production datasets.",
+    "validThrough": "2026-07-25T23:59:59.000Z"
+  }
+}
