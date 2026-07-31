@@ -1,0 +1,42 @@
+[
+  {
+    "name": "verified application passes",
+    "scenario": "pass",
+    "expected_status": "approved",
+    "expected_recommendation": "approve",
+    "expected_category": null,
+    "expected_bucket": null
+  },
+  {
+    "name": "stale cited fact is a contradiction",
+    "scenario": "contradiction",
+    "expected_status": "requires_changes",
+    "expected_recommendation": "revise",
+    "expected_category": "fact_contradiction",
+    "expected_bucket": "must_fix"
+  },
+  {
+    "name": "claim text adds an invented achievement",
+    "scenario": "fabrication",
+    "expected_status": "requires_changes",
+    "expected_recommendation": "revise",
+    "expected_category": "fabricated_claim",
+    "expected_bucket": "must_fix"
+  },
+  {
+    "name": "job description is critically missing",
+    "scenario": "critical_missing",
+    "expected_status": "needs_human",
+    "expected_recommendation": "human_review",
+    "expected_category": "critical_job_data_missing",
+    "expected_bucket": "human_review"
+  },
+  {
+    "name": "one claim cites conflicting fact values",
+    "scenario": "evidence_conflict",
+    "expected_status": "needs_human",
+    "expected_recommendation": "human_review",
+    "expected_category": "evidence_conflict",
+    "expected_bucket": "human_review"
+  }
+]
