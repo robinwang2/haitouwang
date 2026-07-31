@@ -1,0 +1,22 @@
+[
+  {
+    "query": "TypeScript distributed systems",
+    "relevant_fact_ids": ["fact-backend"]
+  },
+  {
+    "query": "PostgreSQL query optimization",
+    "relevant_fact_ids": ["fact-database"]
+  },
+  {
+    "query": "Kubernetes AWS infrastructure",
+    "relevant_fact_ids": ["fact-cloud"]
+  },
+  {
+    "query": "mentored engineers",
+    "relevant_fact_ids": ["fact-leadership"]
+  },
+  {
+    "query": "可观测性平台",
+    "relevant_fact_ids": ["fact-observability"]
+  }
+]

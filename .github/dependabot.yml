@@ -1,0 +1,47 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - '*'
+
+  - package-ecosystem: npm
+    directory: /tooling
+    schedule:
+      interval: weekly
+    groups:
+      quality-tooling:
+        patterns:
+          - '*'
+
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule:
+      interval: weekly
+    groups:
+      web:
+        patterns:
+          - '*'
+
+  - package-ecosystem: npm
+    directory: /apps/local-agent
+    schedule:
+      interval: weekly
+    groups:
+      local-agent:
+        patterns:
+          - '*'
+
+  - package-ecosystem: npm
+    directory: /services/api
+    schedule:
+      interval: weekly
+    groups:
+      api:
+        patterns:
+          - '*'
