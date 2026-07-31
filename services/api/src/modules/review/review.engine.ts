@@ -62,7 +62,7 @@ export async function runReview(
       const agent = agents.get(reviewer);
       return Promise.resolve().then(() => {
         if (!agent) throw new Error('Reviewer is not registered.');
-        return agent.review(context, request.execution.reviewers[reviewer]);
+        return agent.review(clone(context), clone(request.execution.reviewers[reviewer]));
       });
     }),
   );
@@ -80,10 +80,7 @@ export async function runReview(
       drafts.push({ reviewer, finding: unavailable });
       continue;
     }
-    if (
-      result.value.reviewer !== reviewer ||
-      result.value.configuration_id !== request.execution.reviewers[reviewer].configuration_id
-    ) {
+    if (!isValidReport(result.value, reviewer, request.execution.reviewers[reviewer])) {
       const unavailable = unavailableFinding(context);
       reports.push({
         reviewer,
@@ -321,6 +318,48 @@ function unavailableFinding(context: ReviewContext): ReviewerFindingDraft {
       : [{ type: 'job', id: context.job.id, version: context.job.version }],
     disposition: 'human_review',
   };
+}
+
+function isValidReport(
+  report: ReviewerReport,
+  reviewer: RequiredReviewer,
+  configuration: ReviewExecutionConfiguration['reviewers'][RequiredReviewer],
+): boolean {
+  return (
+    report?.reviewer === reviewer &&
+    report.configuration_id === configuration.configuration_id &&
+    Array.isArray(report.findings) &&
+    report.findings.length <= 500 &&
+    report.findings.every(isValidFindingDraft)
+  );
+}
+
+function isValidFindingDraft(finding: ReviewerFindingDraft): boolean {
+  return (
+    finding !== null &&
+    typeof finding === 'object' &&
+    ['info', 'warning', 'must_fix'].includes(finding.severity) &&
+    typeof finding.category === 'string' &&
+    finding.category.trim().length > 0 &&
+    finding.category.length <= 100 &&
+    typeof finding.message === 'string' &&
+    finding.message.trim().length > 0 &&
+    finding.message.length <= 2_000 &&
+    ['must_fix', 'auto_revision', 'human_review'].includes(finding.disposition) &&
+    Array.isArray(finding.evidence_refs) &&
+    finding.evidence_refs.length > 0 &&
+    finding.evidence_refs.length <= 100 &&
+    finding.evidence_refs.every(
+      (reference) =>
+        reference !== null &&
+        typeof reference === 'object' &&
+        ['fact', 'material', 'job', 'review'].includes(reference.type) &&
+        typeof reference.id === 'string' &&
+        reference.id.trim().length > 0 &&
+        (reference.version === undefined ||
+          (Number.isInteger(reference.version) && reference.version > 0)),
+    )
+  );
 }
 
 function modelIdentity(configuration: { provider: string; model: string }): string {

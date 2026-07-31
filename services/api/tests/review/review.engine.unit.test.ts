@@ -136,6 +136,44 @@ describe('decision gates and execution isolation', () => {
     expect(outcome.summary.human_review).toContain(unavailable!.id);
   });
 
+  it('isolates each reviewer from mutations made by another reviewer', async () => {
+    const mutatingAts: ReviewerAgent = {
+      reviewer: 'ats',
+      async review(context, configuration): Promise<ReviewerReport> {
+        context.materials[0]!.document.claims[0]!.text = 'mutated by another reviewer';
+        return { reviewer: 'ats', configuration_id: configuration.configuration_id, findings: [] };
+      },
+    };
+    const outcome = await runReview(
+      requestFor('pass'),
+      withReviewer(createDefaultReviewers(), mutatingAts),
+    );
+
+    expect(outcome.review.status).toBe('approved');
+    expect(outcome.reports.find((report) => report.reviewer === 'fact_check')?.findings).toEqual(
+      [],
+    );
+  });
+
+  it('routes an invalid evidence-less reviewer report to human review', async () => {
+    const invalidNaturalness = scriptedReviewer('naturalness', () => [
+      { ...autoFinding('Missing evidence.'), evidence_refs: [] },
+    ]);
+    const outcome = await runReview(
+      requestFor('pass'),
+      withReviewer(createDefaultReviewers(), invalidNaturalness),
+    );
+
+    expect(outcome.review.status).toBe('needs_human');
+    expect(outcome.review.findings).toContainEqual(
+      expect.objectContaining({
+        reviewer: 'naturalness',
+        category: 'reviewer_unavailable',
+        evidence_refs: [{ type: 'material', id: MATERIAL_ID, version: 1 }],
+      }),
+    );
+  });
+
   it('rejects any reviewer configured with the generator model', async () => {
     const execution = structuredClone(DEFAULT_REVIEW_EXECUTION_CONFIGURATION);
     execution.reviewers.fact_check = {
