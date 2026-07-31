@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <body>
+    <form data-platform="lever" action="https://jobs.lever.co/acme/abc/apply">
+      <label for="name">Full name</label>
+      <input id="name" name="name" required />
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required />
+      <label for="phone">Phone</label>
+      <input id="phone" name="phone" type="tel" />
+      <label for="linkedin">LinkedIn profile</label>
+      <input id="linkedin" name="urls[LinkedIn]" type="url" />
+      <label for="resume">Resume</label>
+      <input id="resume" name="resume" type="file" accept=".pdf,.doc,.docx" required />
+      <button type="submit">Submit application</button>
+    </form>
+  </body>
+</html>
