@@ -1,0 +1,80 @@
+{
+  "release_id": "haitouwang-mvp-technical-candidate-2026-07-31",
+  "candidate_kind": "non-production-validation",
+  "production_authorized": false,
+  "source_branch": "studio/project/0-20",
+  "required_evidence": [
+    {
+      "name": "api-build",
+      "command": "npm.cmd --prefix services/api run build",
+      "expected": "exit 0"
+    },
+    {
+      "name": "typecheck",
+      "command": "npm.cmd --prefix tooling run typecheck",
+      "expected": "exit 0"
+    },
+    {
+      "name": "unit",
+      "command": "npm.cmd --prefix tooling run unit",
+      "expected": "140 passed, 0 failed"
+    },
+    {
+      "name": "contracts",
+      "command": "npm.cmd --prefix tooling run contract",
+      "expected": "OpenAPI and four examples valid"
+    },
+    {
+      "name": "mvp-e2e",
+      "command": "node --test tests/e2e/m1/m1.e2e.test.cjs tests/e2e/m2/m2.e2e.test.cjs tests/e2e/mvp/mvp.e2e.test.cjs",
+      "expected": "19 passed, 0 failed, 0 skipped"
+    },
+    {
+      "name": "browser-agent",
+      "command": "npm.cmd --prefix apps/agent run test:browser",
+      "expected": "7 passed, 0 failed"
+    },
+    {
+      "name": "security",
+      "command": "npm.cmd --prefix tooling run security",
+      "expected": "five workspaces report 0 vulnerabilities; secret scan exits 0"
+    }
+  ],
+  "blockers": [
+    {
+      "id": "REL-001",
+      "severity": "high",
+      "summary": "The NestJS AppModule mounts no MVP business controllers or authentication boundary; current closed-loop evidence is at public-module level.",
+      "control": "block-production-release",
+      "exit_criteria": "Mount contract-conformant authenticated controllers and pass real HTTP cross-tenant and Web/API tests."
+    },
+    {
+      "id": "REL-002",
+      "severity": "high",
+      "summary": "Application and reporting data are in-memory and no production database migrations, durable queue integration, backup or restore implementation exists.",
+      "control": "block-production-release",
+      "exit_criteria": "Add durable repositories and reviewed forward/backward migrations, then complete a backup/restore drill against production-equivalent infrastructure."
+    },
+    {
+      "id": "REL-003",
+      "severity": "high",
+      "summary": "Data region, AI provider/cross-border policy, retention periods, RPO and RTO remain owner decisions with future due dates.",
+      "control": "block-production-release",
+      "exit_criteria": "Record approved decisions and configure providers, retention, backup frequency and recovery objectives accordingly."
+    },
+    {
+      "id": "REL-004",
+      "severity": "medium",
+      "summary": "The repository-wide quality command is red because of pre-existing formatting and lint findings outside this ticket's write scope.",
+      "control": "block-production-release",
+      "exit_criteria": "Resolve the 40 Prettier findings and four review-workflow lint errors, then run npm.cmd --prefix tooling run quality successfully."
+    },
+    {
+      "id": "REL-005",
+      "severity": "high",
+      "summary": "Production infrastructure, TLS ingress, health/readiness endpoints, monitoring and alert routing are not defined in the repository.",
+      "control": "block-production-release",
+      "exit_criteria": "Add reviewed production IaC and observability, then execute deployment, smoke, incident-routing and rollback drills."
+    }
+  ]
+}
