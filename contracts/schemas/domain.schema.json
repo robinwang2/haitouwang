@@ -103,7 +103,16 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["user", "file", "greenhouse", "lever", "company_careers", "manual_url", "email", "system_rule"]
+          "enum": [
+            "user",
+            "file",
+            "greenhouse",
+            "lever",
+            "company_careers",
+            "manual_url",
+            "email",
+            "system_rule"
+          ]
         },
         "reference": {
           "type": "string",
@@ -232,7 +241,17 @@
     "User": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "email", "display_name", "locale", "time_zone", "status", "version", "created_at", "updated_at"],
+      "required": [
+        "id",
+        "email",
+        "display_name",
+        "locale",
+        "time_zone",
+        "status",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "email": {
@@ -259,7 +278,18 @@
     "Goal": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "name", "title_keywords", "locations", "employment_types", "status", "version", "created_at", "updated_at"],
+      "required": [
+        "id",
+        "user_id",
+        "name",
+        "title_keywords",
+        "locations",
+        "employment_types",
+        "status",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "user_id": { "$ref": "#/$defs/Uuid" },
@@ -316,13 +346,35 @@
     "Fact": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "kind", "value", "scope", "status", "source", "version", "created_at", "updated_at"],
+      "required": [
+        "id",
+        "user_id",
+        "kind",
+        "value",
+        "scope",
+        "status",
+        "source",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "user_id": { "$ref": "#/$defs/Uuid" },
         "kind": {
           "type": "string",
-          "enum": ["identity", "contact", "summary", "experience", "education", "skill", "certification", "project", "work_authorization", "preference"]
+          "enum": [
+            "identity",
+            "contact",
+            "summary",
+            "experience",
+            "education",
+            "skill",
+            "certification",
+            "project",
+            "work_authorization",
+            "preference"
+          ]
         },
         "value": {
           "type": "object",
@@ -359,7 +411,15 @@
         },
         "status": {
           "type": "string",
-          "enum": ["pending_confirmation", "active", "expired", "rejected", "revoked", "prohibited", "deleted"]
+          "enum": [
+            "pending_confirmation",
+            "active",
+            "expired",
+            "rejected",
+            "revoked",
+            "prohibited",
+            "deleted"
+          ]
         },
         "valid_from": { "$ref": "#/$defs/Timestamp" },
         "valid_until": { "$ref": "#/$defs/Timestamp" },
@@ -373,13 +433,32 @@
     "FileMetadata": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "purpose", "display_name", "media_type", "byte_size", "sha256", "scan_status", "version", "created_at"],
+      "required": [
+        "id",
+        "user_id",
+        "purpose",
+        "display_name",
+        "media_type",
+        "byte_size",
+        "sha256",
+        "scan_status",
+        "version",
+        "created_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "user_id": { "$ref": "#/$defs/Uuid" },
         "purpose": {
           "type": "string",
-          "enum": ["resume_source", "resume_output", "cover_letter", "portfolio", "transcript", "application_evidence", "other"]
+          "enum": [
+            "resume_source",
+            "resume_output",
+            "cover_letter",
+            "portfolio",
+            "transcript",
+            "application_evidence",
+            "other"
+          ]
         },
         "display_name": {
           "type": "string",
@@ -388,7 +467,13 @@
         },
         "media_type": {
           "type": "string",
-          "enum": ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain", "image/png", "image/jpeg"]
+          "enum": [
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "text/plain",
+            "image/png",
+            "image/jpeg"
+          ]
         },
         "byte_size": {
           "type": "integer",
@@ -428,7 +513,17 @@
     "Material": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "kind", "status", "version", "file_ids", "fact_citations", "created_at", "updated_at"],
+      "required": [
+        "id",
+        "user_id",
+        "kind",
+        "status",
+        "version",
+        "file_ids",
+        "fact_citations",
+        "created_at",
+        "updated_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "user_id": { "$ref": "#/$defs/Uuid" },
@@ -439,7 +534,15 @@
         },
         "status": {
           "type": "string",
-          "enum": ["draft", "generating", "review_required", "approved", "rejected", "failed", "superseded"]
+          "enum": [
+            "draft",
+            "generating",
+            "review_required",
+            "approved",
+            "rejected",
+            "failed",
+            "superseded"
+          ]
         },
         "version": { "$ref": "#/$defs/Version" },
         "file_ids": {
@@ -461,7 +564,22 @@
     "Job": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "canonical_url", "source", "source_refs", "title", "company", "location", "employment_type", "description_status", "risk", "status", "version", "created_at", "updated_at"],
+      "required": [
+        "id",
+        "canonical_url",
+        "source",
+        "source_refs",
+        "title",
+        "company",
+        "location",
+        "employment_type",
+        "description_status",
+        "risk",
+        "status",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "canonical_url": {
@@ -496,7 +614,15 @@
         },
         "employment_type": {
           "type": "string",
-          "enum": ["full_time", "part_time", "contract", "internship", "temporary", "other", "unknown"]
+          "enum": [
+            "full_time",
+            "part_time",
+            "contract",
+            "internship",
+            "temporary",
+            "other",
+            "unknown"
+          ]
         },
         "salary": { "$ref": "#/$defs/MoneyRange" },
         "description_status": {
@@ -541,7 +667,15 @@
       "properties": {
         "name": {
           "type": "string",
-          "enum": ["skills", "experience", "work_authorization", "location", "salary", "employment_type", "preference"]
+          "enum": [
+            "skills",
+            "experience",
+            "work_authorization",
+            "location",
+            "salary",
+            "employment_type",
+            "preference"
+          ]
         },
         "weight": {
           "type": "integer",
@@ -570,7 +704,15 @@
       "properties": {
         "name": {
           "type": "string",
-          "enum": ["work_authorization", "blacklist", "duplicate", "location", "salary", "employment_type", "risk"]
+          "enum": [
+            "work_authorization",
+            "blacklist",
+            "duplicate",
+            "location",
+            "salary",
+            "employment_type",
+            "risk"
+          ]
         },
         "result": {
           "type": "string",
@@ -590,7 +732,19 @@
     "Score": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "goal_id", "job_id", "total", "dimensions", "hard_gates", "decision", "explanations", "input_version", "created_at"],
+      "required": [
+        "id",
+        "user_id",
+        "goal_id",
+        "job_id",
+        "total",
+        "dimensions",
+        "hard_gates",
+        "decision",
+        "explanations",
+        "input_version",
+        "created_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "user_id": { "$ref": "#/$defs/Uuid" },
@@ -641,7 +795,15 @@
         "id": { "$ref": "#/$defs/Uuid" },
         "reviewer": {
           "type": "string",
-          "enum": ["ats", "hard_requirements", "matching", "skeptical_recruiter", "hiring_manager", "fact_check", "naturalness"]
+          "enum": [
+            "ats",
+            "hard_requirements",
+            "matching",
+            "skeptical_recruiter",
+            "hiring_manager",
+            "fact_check",
+            "naturalness"
+          ]
         },
         "severity": {
           "type": "string",
@@ -671,7 +833,20 @@
     "Review": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "job_id", "material_ids", "status", "reviewers", "findings", "recommendation", "round", "version", "created_at", "updated_at"],
+      "required": [
+        "id",
+        "user_id",
+        "job_id",
+        "material_ids",
+        "status",
+        "reviewers",
+        "findings",
+        "recommendation",
+        "round",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "user_id": { "$ref": "#/$defs/Uuid" },
@@ -685,7 +860,15 @@
         },
         "status": {
           "type": "string",
-          "enum": ["queued", "running", "requires_changes", "needs_human", "approved", "rejected", "failed"]
+          "enum": [
+            "queued",
+            "running",
+            "requires_changes",
+            "needs_human",
+            "approved",
+            "rejected",
+            "failed"
+          ]
         },
         "reviewers": {
           "type": "array",
@@ -694,7 +877,15 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "enum": ["ats", "hard_requirements", "matching", "skeptical_recruiter", "hiring_manager", "fact_check", "naturalness"]
+            "enum": [
+              "ats",
+              "hard_requirements",
+              "matching",
+              "skeptical_recruiter",
+              "hiring_manager",
+              "fact_check",
+              "naturalness"
+            ]
           }
         },
         "findings": {
@@ -719,7 +910,18 @@
     "Agent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "device_name", "public_key_thumbprint", "status", "scopes", "authorization_version", "version", "created_at", "updated_at"],
+      "required": [
+        "id",
+        "user_id",
+        "device_name",
+        "public_key_thumbprint",
+        "status",
+        "scopes",
+        "authorization_version",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "user_id": { "$ref": "#/$defs/Uuid" },
@@ -761,7 +963,12 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["confirmation_number", "redacted_screenshot", "success_page_fingerprint", "manual_attestation"]
+          "enum": [
+            "confirmation_number",
+            "redacted_screenshot",
+            "success_page_fingerprint",
+            "manual_attestation"
+          ]
         },
         "reference": {
           "type": "string",
@@ -824,7 +1031,20 @@
     "Application": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "job_id", "goal_id", "material_ids", "status", "submission_idempotency_key", "evidence", "timeline", "version", "created_at", "updated_at"],
+      "required": [
+        "id",
+        "user_id",
+        "job_id",
+        "goal_id",
+        "material_ids",
+        "status",
+        "submission_idempotency_key",
+        "evidence",
+        "timeline",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "user_id": { "$ref": "#/$defs/Uuid" },
@@ -864,17 +1084,47 @@
     "Task": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "type", "status", "resource", "attempt", "max_attempts", "created_at", "updated_at"],
+      "required": [
+        "id",
+        "user_id",
+        "type",
+        "status",
+        "resource",
+        "attempt",
+        "max_attempts",
+        "created_at",
+        "updated_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "user_id": { "$ref": "#/$defs/Uuid" },
         "type": {
           "type": "string",
-          "enum": ["import_job", "score_job", "generate_material", "review_application", "fill_application", "submit_application", "manual_application", "send_notification", "sync_email", "build_interview_pack"]
+          "enum": [
+            "import_job",
+            "score_job",
+            "generate_material",
+            "review_application",
+            "fill_application",
+            "submit_application",
+            "manual_application",
+            "send_notification",
+            "sync_email",
+            "build_interview_pack"
+          ]
         },
         "status": {
           "type": "string",
-          "enum": ["queued", "leased", "running", "succeeded", "failed", "requires_human", "cancelled", "expired"]
+          "enum": [
+            "queued",
+            "leased",
+            "running",
+            "succeeded",
+            "failed",
+            "requires_human",
+            "cancelled",
+            "expired"
+          ]
         },
         "resource": { "$ref": "#/$defs/ResourceRef" },
         "attempt": {
@@ -910,13 +1160,29 @@
     "Notification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "type", "status", "dedupe_key", "channel", "source_ref", "created_at"],
+      "required": [
+        "id",
+        "user_id",
+        "type",
+        "status",
+        "dedupe_key",
+        "channel",
+        "source_ref",
+        "created_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "user_id": { "$ref": "#/$defs/Uuid" },
         "type": {
           "type": "string",
-          "enum": ["high_match", "review_required", "login_expired", "task_failed", "deadline_due", "daily_report"]
+          "enum": [
+            "high_match",
+            "review_required",
+            "login_expired",
+            "task_failed",
+            "deadline_due",
+            "daily_report"
+          ]
         },
         "status": {
           "type": "string",
@@ -940,7 +1206,20 @@
     "Interview": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "application_id", "round", "status", "start_at", "end_at", "time_zone", "source", "version", "created_at", "updated_at"],
+      "required": [
+        "id",
+        "user_id",
+        "application_id",
+        "round",
+        "status",
+        "start_at",
+        "end_at",
+        "time_zone",
+        "source",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "user_id": { "$ref": "#/$defs/Uuid" },
@@ -971,7 +1250,17 @@
     "MetricDefinition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "key", "version", "name", "unit", "source_fields", "dedupe_rule", "time_zone_rule", "created_at"],
+      "required": [
+        "id",
+        "key",
+        "version",
+        "name",
+        "unit",
+        "source_fields",
+        "dedupe_rule",
+        "time_zone_rule",
+        "created_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "key": {
@@ -1015,7 +1304,17 @@
     "MetricPoint": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "definition_id", "definition_version", "period_start", "period_end", "value", "sample_size", "computed_at"],
+      "required": [
+        "id",
+        "user_id",
+        "definition_id",
+        "definition_version",
+        "period_start",
+        "period_end",
+        "value",
+        "sample_size",
+        "computed_at"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/Uuid" },
         "user_id": { "$ref": "#/$defs/Uuid" },
@@ -1050,7 +1349,18 @@
     "AuditEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["event_id", "tenant_id", "occurred_at", "actor", "action", "resource", "outcome", "request_id", "correlation_id", "changed_fields"],
+      "required": [
+        "event_id",
+        "tenant_id",
+        "occurred_at",
+        "actor",
+        "action",
+        "resource",
+        "outcome",
+        "request_id",
+        "correlation_id",
+        "changed_fields"
+      ],
       "properties": {
         "event_id": { "$ref": "#/$defs/Uuid" },
         "tenant_id": { "$ref": "#/$defs/Uuid" },

@@ -4,5 +4,6 @@ export * from './materials.export';
 export * from './materials.generator';
 export * from './materials.module';
 export * from './materials.policy';
+export * from './materials.repository';
 export * from './materials.service';
 export * from './materials.types';

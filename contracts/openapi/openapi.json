@@ -131,7 +131,15 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": ["pending_confirmation", "active", "expired", "rejected", "revoked", "prohibited", "deleted"]
+              "enum": [
+                "pending_confirmation",
+                "active",
+                "expired",
+                "rejected",
+                "revoked",
+                "prohibited",
+                "deleted"
+              ]
             }
           }
         ],
@@ -1680,7 +1688,18 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["identity", "contact", "summary", "experience", "education", "skill", "certification", "project", "work_authorization", "preference"]
+            "enum": [
+              "identity",
+              "contact",
+              "summary",
+              "experience",
+              "education",
+              "skill",
+              "certification",
+              "project",
+              "work_authorization",
+              "preference"
+            ]
           },
           "value": {
             "type": "object",
@@ -1828,7 +1847,15 @@
             "uniqueItems": true,
             "items": {
               "type": "string",
-              "enum": ["ats", "hard_requirements", "matching", "skeptical_recruiter", "hiring_manager", "fact_check", "naturalness"]
+              "enum": [
+                "ats",
+                "hard_requirements",
+                "matching",
+                "skeptical_recruiter",
+                "hiring_manager",
+                "fact_check",
+                "naturalness"
+              ]
             }
           }
         }
@@ -1853,7 +1880,14 @@
       "PairingSessionCreated": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["pairing_session_id", "pairing_secret", "pairing_uri", "display_code", "challenge", "expires_at"],
+        "required": [
+          "pairing_session_id",
+          "pairing_secret",
+          "pairing_uri",
+          "display_code",
+          "challenge",
+          "expires_at"
+        ],
         "properties": {
           "pairing_session_id": { "$ref": "#/components/schemas/Uuid" },
           "pairing_secret": {
@@ -1937,7 +1971,14 @@
       "PairingClaimed": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["pairing_session_id", "status", "device_name", "public_key_thumbprint", "display_code", "expires_at"],
+        "required": [
+          "pairing_session_id",
+          "status",
+          "device_name",
+          "public_key_thumbprint",
+          "display_code",
+          "expires_at"
+        ],
         "properties": {
           "pairing_session_id": { "$ref": "#/components/schemas/Uuid" },
           "status": { "const": "claimed" },
@@ -2025,7 +2066,14 @@
       "AgentTokenResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["access_token", "token_type", "expires_in", "refresh_token", "scope", "authorization_version"],
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "refresh_token",
+          "scope",
+          "authorization_version"
+        ],
         "properties": {
           "access_token": {
             "type": "string",
@@ -2068,7 +2116,13 @@
             "uniqueItems": true,
             "items": {
               "type": "string",
-              "enum": ["greenhouse_fill", "lever_fill", "file_upload", "preview", "submit_after_confirmation"]
+              "enum": [
+                "greenhouse_fill",
+                "lever_fill",
+                "file_upload",
+                "preview",
+                "submit_after_confirmation"
+              ]
             }
           },
           "wait_seconds": {
@@ -2081,7 +2135,17 @@
       "AgentCommand": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["command_id", "type", "idempotency_key", "nonce", "issued_at", "expires_at", "resource", "payload", "signature"],
+        "required": [
+          "command_id",
+          "type",
+          "idempotency_key",
+          "nonce",
+          "issued_at",
+          "expires_at",
+          "resource",
+          "payload",
+          "signature"
+        ],
         "properties": {
           "command_id": { "$ref": "#/components/schemas/Uuid" },
           "type": {
@@ -2174,7 +2238,14 @@
           },
           "status": {
             "type": "string",
-            "enum": ["accepted", "started", "paused", "completed", "rejected", "manual_intervention_required"]
+            "enum": [
+              "accepted",
+              "started",
+              "paused",
+              "completed",
+              "rejected",
+              "manual_intervention_required"
+            ]
           },
           "occurred_at": { "$ref": "#/components/schemas/Timestamp" },
           "manual_reason": {
@@ -2226,7 +2297,14 @@
           },
           "status": {
             "type": "string",
-            "enum": ["accepted", "started", "paused", "completed", "rejected", "manual_intervention_required"]
+            "enum": [
+              "accepted",
+              "started",
+              "paused",
+              "completed",
+              "rejected",
+              "manual_intervention_required"
+            ]
           },
           "recorded_at": { "$ref": "#/components/schemas/Timestamp" }
         }
@@ -2234,7 +2312,13 @@
       "HeartbeatRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["agent_version", "status", "capabilities", "authorization_version", "observed_at"],
+        "required": [
+          "agent_version",
+          "status",
+          "capabilities",
+          "authorization_version",
+          "observed_at"
+        ],
         "properties": {
           "agent_version": {
             "type": "string",
@@ -2250,7 +2334,13 @@
             "uniqueItems": true,
             "items": {
               "type": "string",
-              "enum": ["greenhouse_fill", "lever_fill", "file_upload", "preview", "submit_after_confirmation"]
+              "enum": [
+                "greenhouse_fill",
+                "lever_fill",
+                "file_upload",
+                "preview",
+                "submit_after_confirmation"
+              ]
             }
           },
           "authorization_version": {
@@ -2312,7 +2402,15 @@
       "CreateInterviewRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["application_id", "round", "status", "start_at", "end_at", "time_zone", "source"],
+        "required": [
+          "application_id",
+          "round",
+          "status",
+          "start_at",
+          "end_at",
+          "time_zone",
+          "source"
+        ],
         "properties": {
           "application_id": { "$ref": "#/components/schemas/Uuid" },
           "round": {

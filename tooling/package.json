@@ -9,8 +9,8 @@
   },
   "scripts": {
     "bootstrap": "node scripts/npm-workspaces.mjs ci",
-    "format": "prettier --config .prettierrc.json --write . ../.github ../apps ../infra/dev ../services",
-    "format:check": "prettier --config .prettierrc.json --check . ../.github ../apps ../infra/dev ../services",
+    "format": "prettier --config .prettierrc.json --write . ../.github ../apps ../contracts ../docs ../evals ../infra/dev ../services",
+    "format:check": "prettier --config .prettierrc.json --check . ../.github ../apps ../contracts ../docs ../evals ../infra/dev ../services",
     "lint:code": "node scripts/lint.mjs",
     "lint": "npm run format:check && npm run lint:code",
     "typecheck": "node scripts/typecheck.mjs",

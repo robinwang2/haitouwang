@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { MaterialsService, type Material, type MaterialsError } from '../../src/modules/materials';
+import {
+  MaterialsRepository,
+  MaterialsService,
+  type Material,
+  type MaterialsError,
+} from '../../src/modules/materials';
 import type { Review } from '../../src/modules/review';
 
 import { GOAL_ID, NOW, USER_ID, materialFacts } from './fixtures/material-facts';
@@ -101,9 +106,17 @@ describe('server-side material approval gate and transaction', () => {
   });
 
   it('rolls back material history, Review and partial audit when the commit fails', () => {
-    const service = new FailingApprovalService();
+    let failApprovalAudit = false;
+    const repository = new MaterialsRepository(':memory:', (kind) => {
+      if (kind === 'audit' && failApprovalAudit) {
+        failApprovalAudit = false;
+        throw new Error('simulated durable audit write failure');
+      }
+    });
+    const service = new MaterialsService(undefined, undefined, repository);
     const material = generate(service);
     const review = service.saveReview(reviewFor(material, 'approved', 'approve'));
+    failApprovalAudit = true;
 
     expect(() => approve(service, material)).toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({ code: 'TRANSACTION_FAILED' }),
@@ -142,12 +155,6 @@ describe('server-side material approval gate and transaction', () => {
     });
   });
 });
-
-class FailingApprovalService extends MaterialsService {
-  protected override beforeApprovalCommit(): void {
-    throw new Error('simulated persistence failure');
-  }
-}
 
 function generate(service: MaterialsService, id = '30000000-0000-4000-8000-000000000001') {
   return service.generate({

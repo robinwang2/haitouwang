@@ -313,7 +313,12 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["confirmation_number", "redacted_screenshot", "success_page_fingerprint", "manual_attestation"]
+          "enum": [
+            "confirmation_number",
+            "redacted_screenshot",
+            "success_page_fingerprint",
+            "manual_attestation"
+          ]
         },
         "reference": {
           "type": "string",
@@ -336,7 +341,15 @@
     "ApplicationStateChangedData": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["application_id", "from_status", "to_status", "reason_code", "actor", "application_version", "evidence"],
+      "required": [
+        "application_id",
+        "from_status",
+        "to_status",
+        "reason_code",
+        "actor",
+        "application_version",
+        "evidence"
+      ],
       "properties": {
         "application_id": {
           "$ref": "#/$defs/Uuid"
@@ -418,7 +431,14 @@
     "ManualInterventionData": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["application_id", "task_id", "agent_id", "manual_reason", "recovery_action", "evidence_refs"],
+      "required": [
+        "application_id",
+        "task_id",
+        "agent_id",
+        "manual_reason",
+        "recovery_action",
+        "evidence_refs"
+      ],
       "properties": {
         "application_id": {
           "$ref": "#/$defs/Uuid"
@@ -434,7 +454,13 @@
         },
         "recovery_action": {
           "type": "string",
-          "enum": ["user_complete_locally", "user_answer_required", "re_pair_agent", "verify_submission_result", "review_policy"]
+          "enum": [
+            "user_complete_locally",
+            "user_answer_required",
+            "re_pair_agent",
+            "verify_submission_result",
+            "review_policy"
+          ]
         },
         "evidence_refs": {
           "type": "array",
@@ -455,7 +481,14 @@
         },
         "notification_type": {
           "type": "string",
-          "enum": ["high_match", "review_required", "login_expired", "task_failed", "deadline_due", "daily_report"]
+          "enum": [
+            "high_match",
+            "review_required",
+            "login_expired",
+            "task_failed",
+            "deadline_due",
+            "daily_report"
+          ]
         },
         "channel": {
           "type": "string",
@@ -474,7 +507,15 @@
     "MetricRecordedData": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["metric_id", "definition_id", "definition_version", "value", "sample_size", "period_start", "period_end"],
+      "required": [
+        "metric_id",
+        "definition_id",
+        "definition_version",
+        "value",
+        "sample_size",
+        "period_start",
+        "period_end"
+      ],
       "properties": {
         "metric_id": {
           "$ref": "#/$defs/Uuid"
@@ -504,7 +545,15 @@
     "AuditData": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["audit_event_id", "actor", "action", "resource", "outcome", "request_id", "changed_fields"],
+      "required": [
+        "audit_event_id",
+        "actor",
+        "action",
+        "resource",
+        "outcome",
+        "request_id",
+        "changed_fields"
+      ],
       "properties": {
         "audit_event_id": {
           "$ref": "#/$defs/Uuid"
