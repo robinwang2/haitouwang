@@ -1,0 +1,62 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'studio/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Use Node.js 24 LTS
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.18.1
+          package-manager-cache: false
+
+      - name: Install quality tooling
+        working-directory: tooling
+        run: npm ci --ignore-scripts
+
+      - name: Install application workspaces
+        working-directory: tooling
+        run: npm run bootstrap
+
+      - name: Validate development infrastructure
+        working-directory: tooling
+        run: npm run infra:validate
+
+      - name: Lint
+        working-directory: tooling
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: tooling
+        run: npm run typecheck
+
+      - name: Unit tests
+        working-directory: tooling
+        run: npm run unit
+
+      - name: Contract tests
+        working-directory: tooling
+        run: npm run contract
+
+      - name: Dependency and secret scans
+        working-directory: tooling
+        run: npm run security

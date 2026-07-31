@@ -1,0 +1,18 @@
+{
+  "source": "lever",
+  "url": "https://jobs.lever.co/acme/lever-2002?utm_source=newsletter",
+  "fetched_at": "2026-07-21T10:00:00.000Z",
+  "company": "Acme Incorporated",
+  "payload": {
+    "id": "lever-2002",
+    "text": "Senior Software Engineer",
+    "hostedUrl": "https://jobs.lever.co/acme/lever-2002?utm_source=newsletter",
+    "categories": {
+      "location": "New York, NY",
+      "commitment": "Full Time",
+      "team": "Platform"
+    },
+    "descriptionPlain": "Build reliable distributed systems for a growing product team. Partner with product, design, security, and infrastructure engineers to deliver well-tested services, review architecture, mentor teammates, and improve operational quality across the platform.",
+    "state": "published"
+  }
+}
