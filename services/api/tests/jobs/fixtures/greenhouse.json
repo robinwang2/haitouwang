@@ -1,0 +1,22 @@
+{
+  "source": "greenhouse",
+  "url": "https://job-boards.greenhouse.io/acme/jobs/1001?gh_src=campaign",
+  "fetched_at": "2026-07-20T10:00:00.000Z",
+  "company": "Acme Inc.",
+  "payload": {
+    "id": 1001,
+    "title": "Senior Software Engineer",
+    "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/1001?gh_src=campaign",
+    "location": {
+      "name": "New York, NY"
+    },
+    "metadata": [
+      {
+        "name": "Employment Type",
+        "value": "Full-time"
+      }
+    ],
+    "content": "<p>Build reliable distributed systems for a growing product team. Partner with product, design, security, and infrastructure engineers to deliver well-tested services, review architecture, mentor teammates, and improve operational quality across the platform.</p>",
+    "updated_at": "2026-07-19T12:00:00.000Z"
+  }
+}
