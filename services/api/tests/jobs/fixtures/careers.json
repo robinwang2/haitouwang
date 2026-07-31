@@ -1,0 +1,41 @@
+{
+  "source": "company_careers",
+  "url": "https://careers.acme.example/jobs/senior-software-engineer?utm_medium=email",
+  "fetched_at": "2026-07-22T10:00:00.000Z",
+  "payload": {
+    "@context": "https://schema.org",
+    "@type": "JobPosting",
+    "identifier": {
+      "@type": "PropertyValue",
+      "name": "Acme",
+      "value": "ACME-ENG-42"
+    },
+    "title": "Senior Software Engineer",
+    "url": "https://careers.acme.example/jobs/senior-software-engineer?utm_medium=email",
+    "hiringOrganization": {
+      "@type": "Organization",
+      "name": "Acme, Inc."
+    },
+    "jobLocation": {
+      "@type": "Place",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "New York",
+        "addressRegion": "NY"
+      }
+    },
+    "employmentType": "FULL_TIME",
+    "description": "<p>Build reliable distributed systems for a growing product team. Partner with product, design, security, and infrastructure engineers to deliver well-tested services, review architecture, mentor teammates, and improve operational quality across the platform.</p>",
+    "baseSalary": {
+      "@type": "MonetaryAmount",
+      "currency": "USD",
+      "value": {
+        "@type": "QuantitativeValue",
+        "minValue": 175000,
+        "maxValue": 220000,
+        "unitText": "YEAR"
+      }
+    },
+    "validThrough": "2026-09-30T23:59:59.000Z"
+  }
+}
