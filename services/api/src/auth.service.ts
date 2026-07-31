@@ -65,7 +65,7 @@ export class AuthService {
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
       throw new AuthError('AUTH_REQUIRED', 'The bearer access token signature is invalid.');
     }
-    if (claims.exp <= Math.floor(Date.now() / 1000)) {
+    if (!(Number.isInteger(claims.exp) && claims.exp > Math.floor(Date.now() / 1000))) {
       throw new AuthError('TOKEN_EXPIRED', 'The bearer access token has expired.');
     }
     if (

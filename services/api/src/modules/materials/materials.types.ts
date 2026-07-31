@@ -178,6 +178,7 @@ export interface MaterialAuditEvent {
     | 'material.approval_failed'
     | 'material.rejected'
     | 'material.rejection_rejected'
+    | 'material.rejection_failed'
     | 'material.superseded'
     | 'material.exported';
   occurred_at: string;

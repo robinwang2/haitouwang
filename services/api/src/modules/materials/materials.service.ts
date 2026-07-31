@@ -249,9 +249,10 @@ export class MaterialsService {
   }
 
   public reject(userId: string, materialId: string, expectedVersion: number): Material {
+    let current: Material | undefined;
     try {
       return this.repository.transaction(() => {
-        const current = this.requireMaterial(userId, materialId);
+        current = this.requireMaterial(userId, materialId);
         this.assertVersion(current, expectedVersion);
         if (current.status !== 'review_required') {
           throw new MaterialsError(
@@ -278,8 +279,23 @@ export class MaterialsService {
           'rejected',
           error.code,
         );
+        throw error;
       }
-      throw error;
+      if (current) {
+        this.repository.transaction(() =>
+          this.recordAudit(
+            current!,
+            'material.rejection_failed',
+            [],
+            'failed',
+            'TRANSACTION_FAILED',
+          ),
+        );
+      }
+      throw new MaterialsError(
+        'TRANSACTION_FAILED',
+        'Rejection transaction failed and was rolled back.',
+      );
     }
   }
 

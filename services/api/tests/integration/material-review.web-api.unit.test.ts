@@ -268,6 +268,43 @@ describe('real Nest HTTP material-review workflow', () => {
     }
   });
 
+  it.each([
+    ['missing exp', 'missing'],
+    ['string exp', 'string'],
+    ['non-integer exp', 'non-integer'],
+  ] as const)('rejects %s at the real HTTP boundary', async (_label, expirationKind) => {
+    const material = seedMaterial(materials);
+    const review = materials.saveReview(approvedReview(material));
+    const now = Math.floor(Date.now() / 1000);
+    const expirationClaim =
+      expirationKind === 'missing'
+        ? {}
+        : { exp: expirationKind === 'string' ? String(now + 300) : now + 300.5 };
+    const token = signClaims({
+      sub: USER_ID,
+      aud: TEST_AUDIENCE,
+      iat: now,
+      permissions: ['material:approve'],
+      ...expirationClaim,
+    });
+
+    const response = await fetch(`${baseUrl}/v1/materials/${material.id}/approve`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(approvalBody(material, review)),
+    });
+    expect(response.status).toBe(401);
+    const errorBody = await response.json();
+    expectContract('ErrorEnvelope', errorBody);
+    expect(errorBody).toMatchObject({ error: { code: 'TOKEN_EXPIRED' } });
+    expect(materials.get(USER_ID, material.id)).toEqual(material);
+    expect(materials.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+      action: 'material.approval_rejected',
+      outcome: 'rejected',
+      reason_code: 'TOKEN_EXPIRED',
+    });
+  });
+
   it('rolls back durable material and success audit writes after an HTTP persistence failure', async () => {
     const material = seedMaterial(materials);
     const review = materials.saveReview(approvedReview(material));
@@ -357,16 +394,18 @@ function signToken(
   options: { audience?: string; expiresInSeconds?: number } = {},
 ): string {
   const now = Math.floor(Date.now() / 1000);
+  return signClaims({
+    sub: userId,
+    aud: options.audience ?? TEST_AUDIENCE,
+    iat: now,
+    exp: now + (options.expiresInSeconds ?? 300),
+    permissions,
+  });
+}
+
+function signClaims(claims: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const payload = Buffer.from(
-    JSON.stringify({
-      sub: userId,
-      aud: options.audience ?? TEST_AUDIENCE,
-      iat: now,
-      exp: now + (options.expiresInSeconds ?? 300),
-      permissions,
-    }),
-  ).toString('base64url');
+  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
   const signature = createHmac('sha256', testSecret())
     .update(`${header}.${payload}`)
     .digest('base64url');

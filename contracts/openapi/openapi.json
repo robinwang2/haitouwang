@@ -295,8 +295,9 @@
         "tags": ["Materials"],
         "operationId": "rejectMaterial",
         "summary": "Reject a material with an audited server-side transition",
+        "description": "The material transition and success audit commit atomically. A rejected request records material.rejection_rejected; an unexpected persistence failure rolls back the transition and records material.rejection_failed in an independent transaction.",
         "x-required-user-permission": "material:approve",
-        "x-audit-event": "material.rejected_or_rejection_rejected",
+        "x-audit-event": "material.rejected_or_rejection_rejected_or_rejection_failed",
         "parameters": [
           {
             "name": "material_id",

@@ -1,3 +1,8 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -171,6 +176,50 @@ describe('server-side material approval gate and transaction', () => {
       outcome: 'rejected',
       reason_code: 'STATE_TRANSITION_INVALID',
     });
+  });
+
+  it('rolls back a rejection after a real SQLite failure and audits the failed attempt', () => {
+    const temporaryDirectory = mkdtempSync(path.join(tmpdir(), 'haitouwang-rejection-'));
+    const databasePath = path.join(temporaryDirectory, 'materials.sqlite');
+    const repository = new MaterialsRepository(databasePath);
+    try {
+      const service = new MaterialsService(undefined, undefined, repository);
+      const material = generate(service);
+      const review = service.saveReview(reviewFor(material, 'approved', 'approve'));
+      const database = new DatabaseSync(databasePath);
+      try {
+        database.exec(`
+          CREATE TRIGGER fail_material_rejection_audit
+          BEFORE INSERT ON material_audit_events
+          WHEN json_extract(NEW.payload, '$.action') = 'material.rejected'
+          BEGIN
+            SELECT RAISE(FAIL, 'simulated durable rejection audit failure');
+          END;
+        `);
+      } finally {
+        database.close();
+      }
+
+      expect(() => service.reject(USER_ID, material.id, material.version)).toThrowError(
+        expect.objectContaining<Partial<MaterialsError>>({ code: 'TRANSACTION_FAILED' }),
+      );
+
+      expect(service.get(USER_ID, material.id)).toEqual(material);
+      expect(service.getVersions(USER_ID, material.id)).toEqual([material]);
+      expect(service.getReview(USER_ID, review.id)).toEqual(review);
+      expect(service.getAuditEvents(USER_ID)).not.toContainEqual(
+        expect.objectContaining({ action: 'material.rejected' }),
+      );
+      expect(service.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+        action: 'material.rejection_failed',
+        outcome: 'failed',
+        reason_code: 'TRANSACTION_FAILED',
+        material_version: material.version,
+      });
+    } finally {
+      repository.onModuleDestroy();
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
   });
 });
 

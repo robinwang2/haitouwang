@@ -1376,7 +1376,8 @@
         "actor": { "$ref": "#/$defs/Actor" },
         "action": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_.-]{2,127}$"
+          "pattern": "^[a-z][a-z0-9_.-]{2,127}$",
+          "examples": ["material.approved", "material.rejection_failed"]
         },
         "resource": { "$ref": "#/$defs/ResourceRef" },
         "outcome": {
