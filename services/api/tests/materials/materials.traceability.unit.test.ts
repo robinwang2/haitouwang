@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   generateMaterialDraft,
   isFactAllowed,
+  renderMaterialDocumentText,
   validateMaterialDocument,
   type GenerateMaterialInput,
   type MaterialDocument,
@@ -210,6 +211,32 @@ describe('fixed anti-hallucination fixtures', () => {
           code: 'DOCUMENT_TEXT_MISMATCH',
           severity: 'blocking',
         }),
+      ]),
+    );
+  });
+
+  it.each([
+    ['title', (document: MaterialDocument) => (document.title = 'GPA 4.00')],
+    [
+      'section heading',
+      (document: MaterialDocument) => (document.sections[0]!.heading = 'Invented Corporation'),
+    ],
+  ])('blocks a newly added critical fact in the %s', (_location, mutate) => {
+    const facts = materialFacts();
+    const generated = generateMaterialDraft(input('resume', { facts }));
+    mutate(generated.document);
+    generated.document.plain_text = renderMaterialDocumentText(generated.document);
+
+    const validation = validateMaterialDocument(generated.document, facts, {
+      user_id: USER_ID,
+      goal_id: GOAL_ID,
+      evaluated_at: NOW,
+    });
+
+    expect(validation.checks.publishable).toBe(false);
+    expect(validation.checks.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'STRUCTURE_INVALID', severity: 'blocking' }),
       ]),
     );
   });

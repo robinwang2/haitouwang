@@ -3,6 +3,7 @@ import type { Fact } from '../profile';
 import { MaterialsError } from './materials.errors';
 import type {
   ClaimEvidence,
+  GeneratedMaterialKind,
   MaterialCheckIssue,
   MaterialChecks,
   MaterialDocument,
@@ -13,6 +14,24 @@ import type {
 const PLACEHOLDER =
   /\{\{[^{}\r\n]+\}\}|\[\[[^\]\r\n]+\]\]|\[(?:placeholder|insert|your\s+)[^\]\r\n]*\]|<[^<>\r\n]+>|\b(?:TBD|TODO)\b/iu;
 const HTML_MARKUP = /<\/?[a-z][^>]*>/iu;
+export const MATERIAL_TITLES: Readonly<Record<GeneratedMaterialKind, string>> = {
+  resume: 'Resume',
+  cover_letter: 'Cover Letter',
+  open_question_answer: 'Open Question Answer',
+};
+export const MATERIAL_SECTION_HEADINGS: Readonly<Record<string, string>> = {
+  identity: 'Identity',
+  contact: 'Contact',
+  summary: 'Summary',
+  experience: 'Experience',
+  education: 'Education',
+  skill: 'Skills',
+  certification: 'Certifications',
+  project: 'Projects',
+  work_authorization: 'Work Authorization',
+  preference: 'Preferences',
+  pending_confirmation: 'Pending Confirmation',
+};
 
 export interface FactPolicyContext {
   user_id: string;
@@ -102,6 +121,7 @@ export function validateMaterialDocument(
   validatePolicyContext(context);
   validateConstraints(constraints);
   const issues: MaterialCheckIssue[] = [];
+  validateDocumentStructure(document, issues);
   const factMap = new Map<string, Fact>();
   for (const fact of facts) {
     if (factMap.has(fact.id)) {
@@ -330,6 +350,7 @@ export function renderMaterialDocumentText(document: MaterialDocument): string {
   const claims = new Map(document.claims.map((claim) => [claim.id, claim]));
   return [
     ...(document.title ? [document.title] : []),
+    ...(document.prompt ? [`Question: ${document.prompt}`] : []),
     ...(document.preamble ?? []),
     ...document.sections.flatMap((section) => [
       ...(section.heading ? [section.heading] : []),
@@ -340,6 +361,62 @@ export function renderMaterialDocumentText(document: MaterialDocument): string {
     ]),
     ...(document.closing ?? []),
   ].join('\n\n');
+}
+
+function validateDocumentStructure(document: MaterialDocument, issues: MaterialCheckIssue[]): void {
+  const expectedTitle = MATERIAL_TITLES[document.kind];
+  if (!expectedTitle || document.title !== expectedTitle) {
+    issues.push({
+      code: 'STRUCTURE_INVALID',
+      severity: 'blocking',
+      message: 'Material title or kind does not match a supported generated layout.',
+    });
+  }
+
+  const expectedPreamble = document.kind === 'cover_letter' ? ['Dear Hiring Team,'] : undefined;
+  const expectedClosing = document.kind === 'cover_letter' ? ['Sincerely'] : undefined;
+  if (!optionalLinesEqual(document.preamble, expectedPreamble)) {
+    issues.push({
+      code: 'STRUCTURE_INVALID',
+      severity: 'blocking',
+      message: 'Material preamble contains text outside the generated layout.',
+    });
+  }
+  if (!optionalLinesEqual(document.closing, expectedClosing)) {
+    issues.push({
+      code: 'STRUCTURE_INVALID',
+      severity: 'blocking',
+      message: 'Material closing contains text outside the generated layout.',
+    });
+  }
+  if (
+    (document.kind !== 'open_question_answer' && document.prompt !== undefined) ||
+    (document.prompt !== undefined && !document.prompt.trim())
+  ) {
+    issues.push({
+      code: 'STRUCTURE_INVALID',
+      severity: 'blocking',
+      message: 'Only an open-question material may contain a non-empty question prompt.',
+    });
+  }
+
+  const sectionKeys = new Set<string>();
+  for (const section of document.sections) {
+    const expectedHeading = MATERIAL_SECTION_HEADINGS[section.key];
+    if (!expectedHeading || section.heading !== expectedHeading || sectionKeys.has(section.key)) {
+      issues.push({
+        code: 'STRUCTURE_INVALID',
+        severity: 'blocking',
+        message: `Section ${section.key} does not match the generated layout.`,
+      });
+    }
+    sectionKeys.add(section.key);
+  }
+}
+
+function optionalLinesEqual(left: string[] | undefined, right: string[] | undefined): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return left.length === right.length && left.every((line, index) => line === right[index]);
 }
 
 function validatePolicyContext(context: FactPolicyContext): void {

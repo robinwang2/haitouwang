@@ -2,6 +2,8 @@ import type { Fact, FactKind, FileMetadata } from '../profile';
 
 import { MaterialsError } from './materials.errors';
 import {
+  MATERIAL_SECTION_HEADINGS,
+  MATERIAL_TITLES,
   renderMaterialDocumentText,
   selectAllowedFacts,
   type FactPolicyContext,
@@ -51,18 +53,6 @@ const ANSWER_ORDER: readonly FactKind[] = [
   'preference',
 ];
 
-const SECTION_HEADINGS: Readonly<Record<FactKind, string>> = {
-  identity: 'Identity',
-  contact: 'Contact',
-  summary: 'Summary',
-  experience: 'Experience',
-  education: 'Education',
-  skill: 'Skills',
-  certification: 'Certifications',
-  project: 'Projects',
-  work_authorization: 'Work Authorization',
-  preference: 'Preferences',
-};
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export interface GeneratedDraft {
@@ -121,7 +111,7 @@ export function generateMaterialDraft(input: GenerateMaterialInput): GeneratedDr
     if (kindClaims.length === 0) continue;
     sections.push({
       key: kind,
-      heading: SECTION_HEADINGS[kind],
+      heading: MATERIAL_SECTION_HEADINGS[kind],
       claim_ids: kindClaims.map((claim) => claim.id),
     });
     claims.push(...kindClaims);
@@ -211,16 +201,14 @@ function assembleDocument(
   sections: MaterialSection[],
   claims: MaterialClaim[],
 ): MaterialDocument {
-  const title =
-    input.kind === 'resume'
-      ? 'Resume'
-      : input.kind === 'cover_letter'
-        ? 'Cover Letter'
-        : input.open_question?.trim() || 'Open Question Answer';
+  const title = MATERIAL_TITLES[input.kind];
+  const prompt = input.kind === 'open_question_answer' ? input.open_question?.trim() : undefined;
   const preamble = input.kind === 'cover_letter' ? ['Dear Hiring Team,'] : undefined;
   const closing = input.kind === 'cover_letter' ? ['Sincerely'] : undefined;
   const document: MaterialDocument = {
+    kind: input.kind,
     title,
+    ...(prompt ? { prompt } : {}),
     ...(preamble ? { preamble } : {}),
     sections: sections.map((section) => ({
       ...section,

@@ -25,7 +25,9 @@ export interface MaterialSection {
 }
 
 export interface MaterialDocument {
+  kind: GeneratedMaterialKind;
   title?: string;
+  prompt?: string;
   preamble?: string[];
   sections: MaterialSection[];
   claims: MaterialClaim[];
@@ -46,6 +48,7 @@ export type MaterialCheckCode =
   | 'ATS_UNSAFE_CONTENT'
   | 'DUPLICATE_CLAIM_ID'
   | 'UNREFERENCED_CLAIM'
+  | 'STRUCTURE_INVALID'
   | 'DOCUMENT_TEXT_MISMATCH';
 
 export interface MaterialCheckIssue {
