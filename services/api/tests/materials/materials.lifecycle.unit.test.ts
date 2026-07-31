@@ -238,6 +238,7 @@ function approveMaterial(
       user_id: USER_ID,
       job_id: material.job_id!,
       material_ids: [material.id],
+      material_versions: { [material.id]: material.version },
       status: 'approved',
       reviewers: ['ats', 'hard_requirements', 'fact_check', 'naturalness'],
       findings: [],

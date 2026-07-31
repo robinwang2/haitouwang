@@ -97,7 +97,7 @@ export class WorkflowController {
       this.materials.recordRejectionGateFailure(principal.userId, materialId, 'FORBIDDEN');
       throw httpError(403, 'FORBIDDEN', 'The authenticated principal cannot reject materials.');
     }
-    const body = validateRejectMaterialBody(unvalidatedBody);
+    const body = this.validateRejectionBody(unvalidatedBody, principal.userId, materialId);
     return this.execute(() =>
       toContractMaterial(
         this.materials.reject(principal.userId, materialId, body.expected_version),
@@ -130,7 +130,7 @@ export class WorkflowController {
       event_id: event.event_id,
       tenant_id: event.user_id,
       occurred_at: event.occurred_at,
-      actor: { type: 'user', id: event.user_id },
+      actor: event.actor,
       action: event.action,
       resource: {
         type: 'material',
@@ -190,6 +190,19 @@ export class WorkflowController {
       return validateApproveMaterialBody(value);
     } catch (error) {
       this.materials.recordApprovalGateFailure(userId, materialId, 'VALIDATION_FAILED');
+      throw error;
+    }
+  }
+
+  private validateRejectionBody(
+    value: unknown,
+    userId: string,
+    materialId: string,
+  ): RejectMaterialBody {
+    try {
+      return validateRejectMaterialBody(value);
+    } catch (error) {
+      this.materials.recordRejectionGateFailure(userId, materialId, 'VALIDATION_FAILED');
       throw error;
     }
   }

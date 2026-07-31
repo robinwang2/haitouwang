@@ -164,7 +164,10 @@ export interface MaterialExport {
 
 export interface MaterialAuditEvent {
   event_id: string;
+  /** Tenant/resource owner used to partition audit queries. */
   user_id: string;
+  /** The authenticated caller, or the explicit anonymous system identity. */
+  actor: { type: 'user' | 'system'; id: string };
   material_id: string;
   material_version: number;
   action:

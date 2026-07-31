@@ -287,7 +287,24 @@ export class MaterialsService {
     if (!review.id.trim() || this.repository.findReview(review.id)) {
       throw new MaterialsError('CONFLICT', 'Review id already exists.');
     }
-    for (const materialId of review.material_ids) this.requireMaterial(review.user_id, materialId);
+    if (
+      !review.material_versions ||
+      Object.keys(review.material_versions).length !== review.material_ids.length
+    ) {
+      throw new MaterialsError(
+        'VALIDATION_FAILED',
+        'Review must contain one immutable version snapshot for every material.',
+      );
+    }
+    for (const materialId of review.material_ids) {
+      const material = this.requireMaterial(review.user_id, materialId);
+      if (review.material_versions[materialId] !== material.version) {
+        throw new MaterialsError(
+          'VALIDATION_FAILED',
+          'Review material version snapshot must match the current material version.',
+        );
+      }
+    }
     this.repository.insertReview(clone(review));
     return clone(review);
   }
@@ -437,6 +454,7 @@ export class MaterialsService {
     this.repository.insertAudit({
       event_id: this.idFactory(),
       user_id: material.user_id,
+      actor: { type: 'user', id: material.user_id },
       material_id: material.id,
       material_version: material.version,
       action,
@@ -449,7 +467,7 @@ export class MaterialsService {
 
   private assertApprovalReview(userId: string, material: Material, reviewId: string): void {
     const review = reviewId ? this.repository.findReview(reviewId) : undefined;
-    if (!review || !review.material_ids.includes(material.id)) {
+    if (!review || review.user_id !== userId || !review.material_ids.includes(material.id)) {
       throw new MaterialsError('REVIEW_REQUIRED', 'An eligible server-side Review is required.');
     }
     if (review.findings.some((finding) => isOpenMustFix(finding))) {
@@ -460,6 +478,12 @@ export class MaterialsService {
     }
     if (review.status !== 'approved' || review.recommendation !== 'approve') {
       throw new MaterialsError('REVIEW_NOT_APPROVED', 'Review has not approved this material.');
+    }
+    if (review.material_versions?.[material.id] !== material.version) {
+      throw new MaterialsError(
+        'REVIEW_STALE',
+        'Review does not match the current material version.',
+      );
     }
     const materialEvidence = review.findings
       .flatMap((finding) => finding.evidence_refs)
@@ -490,6 +514,7 @@ export class MaterialsService {
     this.repository.insertAudit({
       event_id: this.idFactory(),
       user_id: auditOwner,
+      actor: userId ? { type: 'user', id: userId } : { type: 'system', id: 'anonymous' },
       material_id: materialId,
       material_version: material?.version ?? 0,
       action,

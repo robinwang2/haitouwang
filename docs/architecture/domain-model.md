@@ -16,7 +16,7 @@ MVP 是共享基础设施上的多用户 SaaS，每个用户构成逻辑数据�
 | 文件/材料 | `FileMetadata` 与 `Material{id,user_id,job_id,kind,status,version,file_ids,fact_citations}`                       | 文件元数据不包含文件正文或签名 URL；每个发布材料陈述必须引用允许事实；已批准版本不可原地覆写                       |
 | 职位      | `Job{id,canonical_url,source,source_refs,title,company,location,employment_type,description_status,risk,status}`  | 多来源归并为一条主记录，官网来源优先；风险/过期/关键字段缺失可强制人工处理                                         |
 | 评分      | `Score{id,user_id,goal_id,job_id,total,dimensions,hard_gates,decision,explanations,input_version}`                | 硬门优先于总分；维度权重固定为 25/20/15/15/10/10/5，合计 100；结果对同一输入版本确定                               |
-| 评审      | `Review{id,user_id,job_id,material_ids,status,reviewers,findings,recommendation,round}`                           | 评审器证据独立；存在未关闭 `must_fix` 时不得批准；生成器和评审器配置隔离                                           |
+| 评审      | `Review{id,user_id,job_id,material_ids,material_versions,status,reviewers,findings,recommendation,round}`         | `material_versions` 固定被评审材料版本；存在未关闭 `must_fix` 时不得批准；生成器和评审器配置隔离                   |
 | 本地代理  | `Agent{id,user_id,device_name,public_key_thumbprint,status,scopes,last_seen_at,version}`                          | 不保存目标站点秘密；授权绑定用户、设备、公钥、受众和范围；撤权不可逆地阻止新命令                                   |
 | 申请      | `Application{id,user_id,job_id,goal_id,material_ids,status,submission_idempotency_key,evidence,timeline,version}` | 一个用户对同一职位/目标的提交键唯一；没有可验证证据不得进入 `submitted`；MVP 提交前必须人工确认                    |
 | 任务      | `Task{id,user_id,type,status,resource,attempt,lease,manual_reason,result_ref}`                                    | 租约绑定代理和 nonce；相同命令/回执幂等；人工任务不得由自动重试解除                                                |

@@ -8,9 +8,10 @@
 
 - 真实 `AppModule` + Nest HTTP listener：批准接口只信任签名访问令牌中的主体，覆盖无令牌 401、过期令牌 401、错误受众 403、错误签名 401、缺少审批权限 403、跨租户资源 404 和合法审批者 200。
 - 可部署鉴权：`AuthService` 验证 HS256 签名、`exp`、`iat`、`aud`、UUID 主体和权限声明；应用不再包含测试 token registry。测试在应用启动前注入测试签名密钥并独立签发短期令牌。
-- 持久化与一致性：材料版本、Review 和审计持久化到 SQLite。批准以 `BEGIN IMMEDIATE` 开启事务，在事务内读取当前材料和 Review、校验门禁、插入材料新版本和成功审计，然后提交。
+- 持久化与一致性：材料版本、Review 和审计持久化到 SQLite。Review 聚合持久化不可缺省的 `material_versions` 快照；批准以 `BEGIN IMMEDIATE` 开启事务，在事务内读取当前材料和 Review、精确比较当前材料版本、校验门禁、插入材料新版本和成功审计，然后提交。无 finding 的已通过 Review 在材料修订后也稳定返回 `REVIEW_STALE`，服务层和真实 HTTP 均有回归覆盖。
 - 回滚验证：HTTP 测试在真实 SQLite 表安装一次性失败触发器，使成功审计写入失败；接口返回契约化 500，材料版本、Review 和成功审计均回滚，只在新事务中留下完整的 `material.approval_failed` 事件。另有应用重启测试确认成功批准、Review 和审计均可重新读取。
-- HTTP 契约：`review_id` 在运行时强制为必填 UUID；请求拒绝未知字段。Material 成功响应只映射契约声明字段，所有错误使用带 `retryable`、`request_id` 和 `correlation_id` 的 `ErrorEnvelope`，领域门禁原因映射到共享错误码。测试以 Draft 2020-12 Schema 验证真实 HTTP Material、AuditEvent 和 ErrorEnvelope。
+- HTTP 契约：`review_id` 在运行时强制为必填 UUID；请求拒绝未知字段。Material 成功响应只映射契约声明字段，所有错误使用带 `retryable`、`request_id` 和 `correlation_id` 的 `ErrorEnvelope`，领域门禁原因映射到共享错误码。批准与拒绝的请求体校验失败均生成门禁审计。测试以 Draft 2020-12 Schema 验证真实 HTTP Material、Review、AuditEvent 和 ErrorEnvelope。
+- 审计主体：持久化事件分别记录租户/资源所有者与实际 actor。跨租户调用失败事件归入资源所有者审计流，但 actor 为真实请求者；无认证主体时明确记录为 `system:anonymous`。HTTP 回归同时断言非法拒绝、匿名请求和跨租户请求的审计主体与原因码。
 - Web/API 联调：Web `MaterialReviewApi` 经真实 HTTP 完成“查看 Review → 关闭 must-fix → 批准 → 查询审计”。夹具只用于预置测试前提，被验证的操作全部经过真实应用装配和 HTTP 边界。
 - Provider Adapter：受控 HTTP server 覆盖 timeout、429、畸形 JSON、非预期文本、缺字段、数据最小化和日志脱敏；Provider 异常由 Review engine 失败关闭为 reviewer unavailable。
 - 黄金样本：固定规范化 finding 文案、完整有序证据引用（含版本）和 finding 状态；有意更新流程见 `evals/review/README.md`。
@@ -38,17 +39,17 @@
 
 命令均在仓库的 `tooling` 目录执行，除特别注明外。最终数字以本报告收尾时的完整运行结果为准。
 
-| 命令                                  | 结果                                                                                                    |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `npm.cmd run format`                  | 通过；格式化范围包含 tooling、GitHub 配置、apps、contracts、docs、evals、infra/dev 和 services          |
-| `npm.cmd run lint`                    | 通过；全范围 Prettier check 和 ESLint 均为 0 问题                                                       |
-| `npm.cmd run typecheck`               | 通过；local-agent、web、api 三个 workspace 均通过                                                       |
-| `npm.cmd run unit`                    | 通过；12 个测试文件，106 passed、1 real-provider smoke skipped；包含 7 条真实 Nest HTTP/SQLite 联调用例 |
-| `npm.cmd run quality`                 | 通过；format、lint、typecheck、unit、contract 全部退出 0；OpenAPI、领域 Schema 和事件样例有效           |
-| `npm.cmd run eval:review`             | 通过；2 个评测文件，29 passed、1 real-provider smoke skipped                                            |
-| `npm.cmd run build`（`services/api`） | 通过；TypeScript build 成功                                                                             |
-| `npm.cmd run security:secrets`        | 通过；未发现仓库秘密                                                                                    |
-| `git diff --check 83c8cd4`            | 通过；无尾随空白或补丁格式错误                                                                          |
+| 命令                                  | 结果                                                                                                     |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `npm.cmd run format`                  | 通过；格式化范围包含 tooling、GitHub 配置、apps、contracts、docs、evals、infra/dev 和 services           |
+| `npm.cmd run lint`                    | 通过；全范围 Prettier check 和 ESLint 均为 0 问题                                                        |
+| `npm.cmd run typecheck`               | 通过；local-agent、web、api 三个 workspace 均通过                                                        |
+| `npm.cmd run unit`                    | 通过；12 个测试文件，110 passed、1 real-provider smoke skipped；包含 10 条真实 Nest HTTP/SQLite 联调用例 |
+| `npm.cmd run quality`                 | 通过；format、lint、typecheck、unit、contract 全部退出 0；OpenAPI、领域 Schema 和事件样例有效            |
+| `npm.cmd run eval:review`             | 通过；2 个评测文件，29 passed、1 real-provider smoke skipped                                             |
+| `npm.cmd run build`（`services/api`） | 通过；TypeScript build 成功                                                                              |
+| `npm.cmd run security:secrets`        | 通过；未发现仓库秘密                                                                                     |
+| `git diff --check`                    | 通过；无尾随空白或补丁格式错误                                                                           |
 
 ## 真实供应商状态
 

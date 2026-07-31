@@ -838,6 +838,7 @@
         "user_id",
         "job_id",
         "material_ids",
+        "material_versions",
         "status",
         "reviewers",
         "findings",
@@ -857,6 +858,13 @@
           "maxItems": 20,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/Uuid" }
+        },
+        "material_versions": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 20,
+          "propertyNames": { "$ref": "#/$defs/Uuid" },
+          "additionalProperties": { "$ref": "#/$defs/Version" }
         },
         "status": {
           "type": "string",

@@ -68,8 +68,14 @@ describe('real Nest HTTP material-review workflow', () => {
     expect(approvedBody).not.toHaveProperty('document');
     expect(materials.getAuditEvents(USER_ID)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ reason_code: 'AUTH_REQUIRED' }),
-        expect.objectContaining({ reason_code: 'FORBIDDEN' }),
+        expect.objectContaining({
+          actor: { type: 'system', id: 'anonymous' },
+          reason_code: 'AUTH_REQUIRED',
+        }),
+        expect.objectContaining({
+          actor: { type: 'user', id: USER_ID },
+          reason_code: 'FORBIDDEN',
+        }),
         expect.objectContaining({ action: 'material.approved', outcome: 'succeeded' }),
       ]),
     );
@@ -103,6 +109,83 @@ describe('real Nest HTTP material-review workflow', () => {
     ).rejects.toMatchObject({ status: 412, code: 'PRECONDITION_REQUIRED' });
   });
 
+  it('rejects a finding-free Review after the reviewed material is revised', async () => {
+    const material = seedMaterial(materials);
+    const review = materials.saveReview(approvedReview(material));
+    const revised = materials.revise(USER_ID, material.id, material.version, {
+      facts: materialFacts(),
+      evaluated_at: NOW,
+      goal_id: GOAL_ID,
+    });
+
+    const response = await fetch(`${baseUrl}/v1/materials/${material.id}/approve`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${signToken(USER_ID, ['material:approve'])}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(approvalBody(revised, review)),
+    });
+
+    expect(response.status).toBe(412);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'PRECONDITION_REQUIRED', retryable: false },
+    });
+    expect(materials.get(USER_ID, material.id)).toEqual(revised);
+    expect(materials.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+      action: 'material.approval_rejected',
+      reason_code: 'REVIEW_STALE',
+    });
+  });
+
+  it('audits an invalid rejection body at the HTTP validation boundary', async () => {
+    const material = seedMaterial(materials);
+    const response = await fetch(`${baseUrl}/v1/materials/${material.id}/reject`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${signToken(USER_ID, ['material:approve'])}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ expected_version: 0 }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
+    expect(materials.get(USER_ID, material.id)).toEqual(material);
+    expect(materials.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+      actor: { type: 'user', id: USER_ID },
+      action: 'material.rejection_rejected',
+      outcome: 'rejected',
+      reason_code: 'VALIDATION_FAILED',
+    });
+  });
+
+  it('records the actual cross-tenant caller as the rejected audit actor', async () => {
+    const material = seedMaterial(materials);
+    const review = materials.saveReview(approvedReview(material));
+    const otherUserId = '10000000-0000-4000-8000-000000000099';
+    const response = await fetch(`${baseUrl}/v1/materials/${material.id}/approve`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${signToken(otherUserId, ['material:approve'])}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(approvalBody(material, review)),
+    });
+
+    expect(response.status).toBe(404);
+    const ownerApi = new MaterialReviewApi(baseUrl, signToken(USER_ID, ['material:read']));
+    const audit = await ownerApi.listAudit(material.id);
+    expect(audit.items).toContainEqual(
+      expect.objectContaining({
+        tenant_id: USER_ID,
+        actor: { type: 'user', id: otherUserId },
+        action: 'material.approval_rejected',
+        reason_code: 'RESOURCE_NOT_FOUND',
+      }),
+    );
+  });
+
   it('covers Web view Review -> resolve must-fix -> approve -> query audit', async () => {
     const material = seedMaterial(materials);
     const review = materials.saveReview(reviewWithMustFix(material));
@@ -110,6 +193,7 @@ describe('real Nest HTTP material-review workflow', () => {
     const api = new MaterialReviewApi(baseUrl, token);
 
     const viewed = await api.getReview(review.id);
+    expectContract('Review', viewed);
     expect(viewed).toMatchObject({ status: 'requires_changes', recommendation: 'revise' });
     expect(viewed.findings[0]).toMatchObject({ severity: 'must_fix', status: 'open' });
 
@@ -254,7 +338,10 @@ const ajv = new Ajv2020({ allErrors: true, strict: true });
 addFormats(ajv);
 ajv.addSchema(domainSchema);
 
-function expectContract(name: 'Material' | 'AuditEvent' | 'ErrorEnvelope', value: unknown): void {
+function expectContract(
+  name: 'Material' | 'Review' | 'AuditEvent' | 'ErrorEnvelope',
+  value: unknown,
+): void {
   const validate = ajv.getSchema(`${domainSchema.$id}#/$defs/${name}`);
   if (!validate) throw new Error(`Contract validator not found for ${name}.`);
   expect(validate(value), JSON.stringify(validate.errors)).toBe(true);
@@ -332,6 +419,7 @@ function reviewBase(material: Material): Omit<Review, 'status' | 'recommendation
     user_id: USER_ID,
     job_id: material.job_id!,
     material_ids: [material.id],
+    material_versions: { [material.id]: material.version },
     reviewers: ['ats', 'hard_requirements', 'fact_check', 'naturalness'],
     round: 1,
     version: 3,

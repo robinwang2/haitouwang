@@ -100,9 +100,27 @@ describe('server-side material approval gate and transaction', () => {
         GOAL_ID,
         review.id,
       ),
-    ).toThrowError(
-      expect.objectContaining<Partial<MaterialsError>>({ code: 'STATE_TRANSITION_INVALID' }),
+    ).toThrowError(expect.objectContaining<Partial<MaterialsError>>({ code: 'REVIEW_STALE' }));
+  });
+
+  it('rejects a finding-free Review after the reviewed material is revised', () => {
+    const service = new MaterialsService();
+    const material = generate(service);
+    const review = service.saveReview(reviewFor(material, 'approved', 'approve'));
+    const revised = service.revise(USER_ID, material.id, material.version, {
+      facts: materialFacts(),
+      evaluated_at: NOW,
+      goal_id: GOAL_ID,
+    });
+
+    expect(() => approve(service, revised, review.id)).toThrowError(
+      expect.objectContaining<Partial<MaterialsError>>({ code: 'REVIEW_STALE' }),
     );
+    expect(service.get(USER_ID, material.id)).toEqual(revised);
+    expect(service.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+      action: 'material.approval_rejected',
+      reason_code: 'REVIEW_STALE',
+    });
   });
 
   it('rolls back material history, Review and partial audit when the commit fails', () => {
@@ -179,6 +197,7 @@ function reviewFor(
     user_id: USER_ID,
     job_id: material.job_id!,
     material_ids: [material.id],
+    material_versions: { [material.id]: material.version },
     status,
     reviewers: ['ats', 'hard_requirements', 'fact_check', 'naturalness'],
     findings,
