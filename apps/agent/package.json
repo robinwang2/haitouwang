@@ -1,0 +1,20 @@
+{
+  "name": "@haitouwang/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run tests/application-runner.unit.test.ts",
+    "test:browser": "vitest run tests/playwright-page.integration.test.ts",
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "playwright": "1.62.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.2",
+    "linkedom": "0.18.12",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}
