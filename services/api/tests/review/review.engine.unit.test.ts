@@ -32,10 +32,18 @@ const JOB_ID = '20000000-0000-4000-8000-000000000002';
 const MATERIAL_ID = '30000000-0000-4000-8000-000000000003';
 const FACT_ID = '40000000-0000-4000-8000-000000000004';
 const SECOND_FACT_ID = '40000000-0000-4000-8000-000000000005';
+const THIRD_FACT_ID = '40000000-0000-4000-8000-000000000006';
 
 interface GoldenSample {
   name: string;
-  scenario: 'pass' | 'contradiction' | 'fabrication' | 'critical_missing' | 'evidence_conflict';
+  scenario:
+    | 'pass'
+    | 'contradiction'
+    | 'fabrication'
+    | 'critical_missing'
+    | 'evidence_conflict'
+    | 'authorization_conflict'
+    | 'risk_review';
   expected_status: 'approved' | 'requires_changes' | 'needs_human';
   expected_recommendation: 'approve' | 'revise' | 'human_review';
   expected_category: string | null;
@@ -199,6 +207,123 @@ describe('decision gates and execution isolation', () => {
   });
 });
 
+describe('hard-requirement safety gates', () => {
+  it('compares every work-authorization fact independently of fact order', async () => {
+    const request = requestFor('pass');
+    request.facts.push(
+      workAuthorizationFact(THIRD_FACT_ID, 'requires_sponsorship'),
+      workAuthorizationFact(SECOND_FACT_ID, 'authorized'),
+    );
+    request.requirements.work_authorization = 'sponsorship_unavailable';
+    const permuted = structuredClone(request);
+    permuted.facts.reverse();
+
+    const [first, second] = await Promise.all([
+      runReview(request, createDefaultReviewers(), deterministicDependencies()),
+      runReview(permuted, createDefaultReviewers(), deterministicDependencies()),
+    ]);
+    const firstConflict = first.review.findings.find(
+      (finding) => finding.category === 'evidence_conflict',
+    );
+    const secondConflict = second.review.findings.find(
+      (finding) => finding.category === 'evidence_conflict',
+    );
+
+    expect(first.review.status).toBe('needs_human');
+    expect(second.review.status).toBe('needs_human');
+    expect(firstConflict?.evidence_refs).toEqual([
+      { type: 'job', id: JOB_ID, version: 1 },
+      { type: 'fact', id: SECOND_FACT_ID, version: 1 },
+      { type: 'fact', id: THIRD_FACT_ID, version: 1 },
+    ]);
+    expect(secondConflict).toEqual(firstConflict);
+    expect(first.summary.human_review).toContain(firstConflict!.id);
+  });
+
+  it.each([
+    {
+      name: 'risk_review status',
+      mutate: (reviewJob: Job) => {
+        reviewJob.status = 'risk_review';
+      },
+    },
+    {
+      name: 'high risk',
+      mutate: (reviewJob: Job) => {
+        reviewJob.risk.level = 'high';
+      },
+    },
+    {
+      name: 'unknown risk',
+      mutate: (reviewJob: Job) => {
+        reviewJob.risk.level = 'unknown';
+      },
+    },
+    {
+      name: 'explicit manual-review flag',
+      mutate: (reviewJob: Job) => {
+        reviewJob.risk.requires_manual_review = true;
+      },
+    },
+  ])('routes $name jobs to human review', async ({ mutate }) => {
+    const request = requestFor('pass');
+    mutate(request.job);
+
+    const outcome = await runReview(request);
+
+    expect(outcome.review.status).toBe('needs_human');
+    expect(outcome.review.recommendation).toBe('human_review');
+    expect(outcome.review.findings).toContainEqual(
+      expect.objectContaining({
+        reviewer: 'hard_requirements',
+        category: 'job_risk_requires_review',
+        evidence_refs: [{ type: 'job', id: JOB_ID, version: 1 }],
+      }),
+    );
+  });
+
+  it('caps the merged findings from all four reports at the Review schema limit', async () => {
+    const reviewers = createDefaultReviewers().map(({ reviewer }) =>
+      scriptedReviewer(reviewer, () =>
+        Array.from({ length: 126 }, (_, index) =>
+          autoFinding(`${reviewer} synthetic boundary finding ${index + 1}.`),
+        ),
+      ),
+    );
+
+    const outcome = await runReview(requestFor('pass'), reviewers);
+
+    expect(outcome.reports.reduce((total, report) => total + report.findings.length, 0)).toBe(504);
+    expect(outcome.review.findings).toHaveLength(500);
+    expect(outcome.review.findings.at(-1)).toEqual(
+      expect.objectContaining({ category: 'review_finding_limit_exceeded' }),
+    );
+    expect(outcome.review.status).toBe('needs_human');
+    expect(outcome.summary.human_review).toContain(outcome.review.findings.at(-1)!.id);
+  });
+
+  it('keeps the third-round limit finding inside the 500-finding contract boundary', async () => {
+    const reviewers = createDefaultReviewers().map(({ reviewer }) =>
+      scriptedReviewer(reviewer, () =>
+        Array.from({ length: 125 }, (_, index) =>
+          autoFinding(`${reviewer} third-round boundary finding ${index + 1}.`),
+        ),
+      ),
+    );
+    const request = requestFor('pass');
+    request.round = 3;
+
+    const outcome = await runReview(request, reviewers);
+
+    expect(outcome.review.findings).toHaveLength(500);
+    expect(outcome.review.findings.at(-1)).toEqual(
+      expect.objectContaining({ category: 'revision_round_limit' }),
+    );
+    expect(outcome.review.status).toBe('needs_human');
+    expect(outcome.summary.human_review).toContain(outcome.review.findings.at(-1)!.id);
+  });
+});
+
 describe('bounded automatic revision', () => {
   it('approves after an isolated automatic revision removes a safe finding', async () => {
     let revised = false;
@@ -280,6 +405,13 @@ function requestFor(scenario: GoldenSample['scenario']): ReviewRequest {
     });
     reviewMaterial.document.claims[0]!.text = 'TypeScript | Rust';
     reviewMaterial.document.plain_text = renderMaterialDocumentText(reviewMaterial.document);
+  } else if (scenario === 'authorization_conflict') {
+    facts.push(
+      workAuthorizationFact(SECOND_FACT_ID, 'authorized'),
+      workAuthorizationFact(THIRD_FACT_ID, 'requires_sponsorship'),
+    );
+  } else if (scenario === 'risk_review') {
+    reviewJob.status = 'risk_review';
   }
 
   return {
@@ -330,6 +462,17 @@ function fact(id: string, name: string): Fact {
     version: 1,
     created_at: NOW,
     updated_at: NOW,
+  };
+}
+
+function workAuthorizationFact(id: string, status: string): Fact {
+  return {
+    ...fact(id, status),
+    kind: 'work_authorization',
+    value:
+      status === 'authorized'
+        ? { jurisdiction: 'unspecified', authorized: true }
+        : { jurisdiction: 'unspecified', requires_sponsorship: true },
   };
 }
 

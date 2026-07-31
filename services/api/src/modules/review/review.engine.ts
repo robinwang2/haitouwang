@@ -21,6 +21,7 @@ import {
 } from './review.types';
 
 const MAX_REVIEW_ROUNDS = 3;
+const MAX_REVIEW_FINDINGS = 500;
 
 export const DEFAULT_REVIEW_EXECUTION_CONFIGURATION: ReviewExecutionConfiguration = {
   generator: {
@@ -95,13 +96,21 @@ export async function runReview(
   }
 
   const findingDispositions = new Map<string, FindingDisposition>();
-  const findings: ReviewFinding[] = drafts.map(({ reviewer, finding }) => {
+  const findings: ReviewFinding[] = [];
+  const draftsToInclude = drafts.slice(0, MAX_REVIEW_FINDINGS);
+  if (drafts.length > MAX_REVIEW_FINDINGS) {
+    draftsToInclude.splice(MAX_REVIEW_FINDINGS - 1, 1, {
+      reviewer: drafts[MAX_REVIEW_FINDINGS - 1]!.reviewer,
+      finding: findingLimitExceeded(context, drafts.length),
+    });
+  }
+  for (const { reviewer, finding } of draftsToInclude) {
     if (finding.evidence_refs.length === 0) {
       throw new ReviewError('VALIDATION_FAILED', 'Every review finding must include evidence.');
     }
     const id = idFactory();
     findingDispositions.set(id, finding.disposition);
-    return {
+    findings.push({
       id,
       reviewer,
       severity: finding.severity,
@@ -109,8 +118,8 @@ export async function runReview(
       message: finding.message,
       evidence_refs: clone(finding.evidence_refs),
       status: 'open' as const,
-    };
-  });
+    });
+  }
 
   let summary = summarize(findings, findingDispositions);
   let terminal = decide(summary, round);
@@ -119,6 +128,10 @@ export async function runReview(
       [...summary.must_fix, ...summary.auto_revision].includes(finding.id),
     );
     if (source) {
+      if (findings.length === MAX_REVIEW_FINDINGS) {
+        const removed = findings.pop()!;
+        findingDispositions.delete(removed.id);
+      }
       const limitFinding: ReviewFinding = {
         id: idFactory(),
         reviewer: source.reviewer,
@@ -316,6 +329,16 @@ function unavailableFinding(context: ReviewContext): ReviewerFindingDraft {
     evidence_refs: material
       ? [{ type: 'material', id: material.id, version: material.version }]
       : [{ type: 'job', id: context.job.id, version: context.job.version }],
+    disposition: 'human_review',
+  };
+}
+
+function findingLimitExceeded(context: ReviewContext, findingCount: number): ReviewerFindingDraft {
+  return {
+    severity: 'must_fix',
+    category: 'review_finding_limit_exceeded',
+    message: `Independent reviewers returned ${findingCount} findings, exceeding the 500-finding review contract; a person must inspect the complete reports.`,
+    evidence_refs: [{ type: 'job', id: context.job.id, version: context.job.version }],
     disposition: 'human_review',
   };
 }

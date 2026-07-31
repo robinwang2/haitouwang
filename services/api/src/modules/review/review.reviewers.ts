@@ -77,6 +77,7 @@ export class HardRequirementsReviewer extends DeterministicReviewer {
   protected inspect(context: ReviewContext): ReviewerFindingDraft[] {
     const findings: ReviewerFindingDraft[] = [];
     const jobEvidence: ResourceRef[] = [jobRef(context)];
+    inspectJobEligibility(context, findings);
     if (
       !context.job.title.trim() ||
       !context.job.company.trim() ||
@@ -138,11 +139,26 @@ export class HardRequirementsReviewer extends DeterministicReviewer {
       );
     }
 
-    if (context.requirements.work_authorization !== 'not_required') {
-      const authorization = context.facts.find(
-        (fact) => fact.kind === 'work_authorization' && isUsableFact(fact, context),
+    const authorizations = context.facts
+      .filter((fact) => fact.kind === 'work_authorization' && isUsableFact(fact, context))
+      .sort(compareFacts);
+    const authorizationStates = new Set(
+      authorizations.flatMap((authorization) => authorizationStatesForFact(authorization)),
+    );
+    const authorizationEvidence = [jobRef(context), ...authorizations.map(factRef)];
+
+    if (authorizationStates.size > 1) {
+      findings.push(
+        finding(
+          'must_fix',
+          'evidence_conflict',
+          'Confirmed work-authorization facts contain incompatible values and require human resolution.',
+          authorizationEvidence,
+          'human_review',
+        ),
       );
-      if (!authorization) {
+    } else if (context.requirements.work_authorization !== 'not_required') {
+      if (authorizations.length === 0) {
         findings.push(
           finding(
             'must_fix',
@@ -153,21 +169,81 @@ export class HardRequirementsReviewer extends DeterministicReviewer {
           ),
         );
       } else if (
+        [...authorizationStates].some(
+          (status) => status !== 'authorized' && status !== 'requires_sponsorship',
+        )
+      ) {
+        findings.push(
+          finding(
+            'must_fix',
+            'work_authorization_unclear',
+            'The confirmed work-authorization evidence is unknown or restricted to manual use.',
+            authorizationEvidence,
+            'human_review',
+          ),
+        );
+      } else if (
         context.requirements.work_authorization === 'sponsorship_unavailable' &&
-        normalize(authorization.value.status).includes('sponsor')
+        authorizationStates.has('requires_sponsorship')
       ) {
         findings.push(
           finding(
             'must_fix',
             'work_authorization_conflict',
             'The confirmed work-authorization evidence conflicts with the job requirement.',
-            [jobRef(context), factRef(authorization)],
+            authorizationEvidence,
             'human_review',
           ),
         );
       }
     }
     return findings;
+  }
+}
+
+function inspectJobEligibility(context: ReviewContext, findings: ReviewerFindingDraft[]): void {
+  const jobEvidence = [jobRef(context)];
+  if (context.job.status === 'expired' || context.job.status === 'removed') {
+    findings.push(
+      finding(
+        'must_fix',
+        'job_unavailable',
+        'The job is expired or removed and cannot be approved for application.',
+        jobEvidence,
+        'human_review',
+      ),
+    );
+    return;
+  }
+
+  if (context.job.status === 'discovered' || context.job.status === 'normalized') {
+    findings.push(
+      finding(
+        'must_fix',
+        'job_status_unverified',
+        'The job has not reached active status and requires human confirmation.',
+        jobEvidence,
+        'human_review',
+      ),
+    );
+  }
+
+  if (
+    context.job.status === 'risk_review' ||
+    context.job.risk.requires_manual_review ||
+    context.job.risk.level === 'medium' ||
+    context.job.risk.level === 'high' ||
+    context.job.risk.level === 'unknown'
+  ) {
+    findings.push(
+      finding(
+        'must_fix',
+        'job_risk_requires_review',
+        'The job status or risk assessment requires a person to review the position before approval.',
+        jobEvidence,
+        'human_review',
+      ),
+    );
   }
 }
 
@@ -400,6 +476,24 @@ function normalize(value: unknown): string {
     .normalize('NFKC')
     .trim()
     .toLocaleLowerCase('en-US');
+}
+
+function authorizationStatesForFact(fact: Fact): string[] {
+  const statuses = new Set<string>();
+  if (typeof fact.value.status === 'string') {
+    statuses.add(normalize(fact.value.status).replace(/[\s-]+/gu, '_'));
+  }
+  if (typeof fact.value.authorized === 'boolean') {
+    statuses.add(fact.value.authorized ? 'authorized' : 'requires_sponsorship');
+  }
+  if (typeof fact.value.requires_sponsorship === 'boolean') {
+    statuses.add(fact.value.requires_sponsorship ? 'requires_sponsorship' : 'authorized');
+  }
+  return statuses.size > 0 ? [...statuses] : ['unknown'];
+}
+
+function compareFacts(left: Fact, right: Fact): number {
+  return left.id.localeCompare(right.id) || left.version - right.version;
 }
 
 function hasUnsafeControlCharacter(value: string): boolean {

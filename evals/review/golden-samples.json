@@ -38,5 +38,21 @@
     "expected_recommendation": "human_review",
     "expected_category": "evidence_conflict",
     "expected_bucket": "human_review"
+  },
+  {
+    "name": "work authorization facts contain incompatible values",
+    "scenario": "authorization_conflict",
+    "expected_status": "needs_human",
+    "expected_recommendation": "human_review",
+    "expected_category": "evidence_conflict",
+    "expected_bucket": "human_review"
+  },
+  {
+    "name": "job is awaiting risk review",
+    "scenario": "risk_review",
+    "expected_status": "needs_human",
+    "expected_recommendation": "human_review",
+    "expected_category": "job_risk_requires_review",
+    "expected_bucket": "human_review"
   }
 ]
