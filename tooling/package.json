@@ -15,6 +15,8 @@
     "lint": "npm run format:check && npm run lint:code",
     "typecheck": "node scripts/typecheck.mjs",
     "unit": "vitest run --config vitest.config.mjs",
+    "eval:review": "vitest run --config vitest.config.mjs ../services/api/tests/review/review.engine.unit.test.ts ../services/api/tests/review/review.provider.unit.test.ts",
+    "eval:review:provider": "vitest run --config vitest.config.mjs ../services/api/tests/review/review.provider.unit.test.ts",
     "contract": "redocly lint ../contracts/openapi/openapi.json && node scripts/validate-contracts.mjs",
     "security:dependencies": "node scripts/npm-workspaces.mjs audit",
     "security:secrets": "node scripts/secret-scan.mjs",

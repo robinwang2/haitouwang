@@ -48,6 +48,18 @@ interface GoldenSample {
   expected_recommendation: 'approve' | 'revise' | 'human_review';
   expected_category: string | null;
   expected_bucket: FindingDisposition | null;
+  expected_findings: Array<{
+    reviewer: RequiredReviewer;
+    severity: 'info' | 'warning' | 'must_fix';
+    category: string;
+    message: string;
+    evidence_refs: Array<{
+      type: 'fact' | 'material' | 'job' | 'review';
+      id: string;
+      version?: number;
+    }>;
+    status: 'open' | 'resolved' | 'accepted_risk';
+  }>;
 }
 
 function readGoldenSamples(): GoldenSample[] {
@@ -73,6 +85,12 @@ describe('independent application review golden evaluation', () => {
     ]);
     expect(new Set(outcome.reports.map((report) => report.configuration_id)).size).toBe(4);
     expect(outcome.review.findings.every((finding) => finding.evidence_refs.length > 0)).toBe(true);
+    expect(
+      outcome.review.findings.map(({ id: _id, message, ...finding }) => ({
+        ...finding,
+        message: normalizeGoldenMessage(message),
+      })),
+    ).toEqual(sample.expected_findings);
 
     if (sample.expected_category && sample.expected_bucket) {
       const finding = outcome.review.findings.find(
@@ -428,6 +446,10 @@ function requestFor(scenario: GoldenSample['scenario']): ReviewRequest {
     evaluated_at: NOW,
     execution: structuredClone(DEFAULT_REVIEW_EXECUTION_CONFIGURATION),
   };
+}
+
+function normalizeGoldenMessage(message: string): string {
+  return message.trim().replace(/\s+/gu, ' ');
 }
 
 function job(): Job {

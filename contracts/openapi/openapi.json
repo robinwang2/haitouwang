@@ -240,6 +240,88 @@
         }
       }
     },
+    "/v1/materials/{material_id}/approve": {
+      "post": {
+        "tags": ["Materials"],
+        "operationId": "approveMaterial",
+        "summary": "Approve a material after a server-side Review gate",
+        "description": "The authenticated principal supplies no tenant identity. The server reads the persisted Review and material in one consistency boundary and rejects missing, stale, non-approved, or open must-fix Reviews.",
+        "x-required-user-permission": "material:approve",
+        "x-audit-event": "material.approved_or_rejected",
+        "parameters": [
+          {
+            "name": "material_id",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/Uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ApproveMaterialRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Material approved",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Material" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "412": { "$ref": "#/components/responses/PreconditionFailed" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/materials/{material_id}/reject": {
+      "post": {
+        "tags": ["Materials"],
+        "operationId": "rejectMaterial",
+        "summary": "Reject a material with an audited server-side transition",
+        "x-required-user-permission": "material:approve",
+        "x-audit-event": "material.rejected_or_rejection_rejected",
+        "parameters": [
+          {
+            "name": "material_id",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/Uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RejectMaterialRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Material rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Material" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/v1/jobs": {
       "get": {
         "tags": ["Jobs"],
@@ -385,6 +467,71 @@
               }
             }
           },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/reviews/{review_id}": {
+      "get": {
+        "tags": ["Reviews"],
+        "operationId": "getReview",
+        "summary": "Get a tenant-owned persisted Review",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/Uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Persisted Review",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Review" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/reviews/{review_id}/findings/{finding_id}/resolve": {
+      "post": {
+        "tags": ["Reviews"],
+        "operationId": "resolveReviewFinding",
+        "summary": "Resolve a Review finding before material approval",
+        "x-required-user-permission": "material:approve",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/Uuid" }
+          },
+          {
+            "name": "finding_id",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/Uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated Review",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Review" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "default": { "$ref": "#/components/responses/Error" }
         }
@@ -1603,6 +1750,39 @@
             "maxItems": 500,
             "uniqueItems": true,
             "items": { "$ref": "#/components/schemas/Uuid" }
+          }
+        }
+      },
+      "ApproveMaterialRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expected_version", "facts", "evaluated_at", "review_id"],
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "facts": {
+            "type": "array",
+            "maxItems": 500,
+            "items": { "$ref": "#/components/schemas/Fact" }
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "goal_id": { "$ref": "#/components/schemas/Uuid" },
+          "review_id": { "$ref": "#/components/schemas/Uuid" }
+        }
+      },
+      "RejectMaterialRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expected_version"],
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
           }
         }
       },

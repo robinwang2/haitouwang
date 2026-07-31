@@ -171,9 +171,14 @@ export interface MaterialAuditEvent {
     | 'material.draft_created'
     | 'material.draft_revised'
     | 'material.approved'
+    | 'material.approval_rejected'
+    | 'material.approval_failed'
     | 'material.rejected'
+    | 'material.rejection_rejected'
     | 'material.superseded'
     | 'material.exported';
   occurred_at: string;
   changed_fields: string[];
+  outcome?: 'succeeded' | 'rejected' | 'failed';
+  reason_code?: string;
 }

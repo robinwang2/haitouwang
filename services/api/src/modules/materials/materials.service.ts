@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable, Optional } from '@nestjs/common';
 
 import type { Fact } from '../profile';
+import type { Review, ReviewFinding } from '../review';
 
 import { diffMaterials } from './materials.diff';
 import { MaterialsError } from './materials.errors';
@@ -27,6 +28,7 @@ export class MaterialsService {
   private readonly current = new Map<string, Material>();
   private readonly versions = new Map<string, Material[]>();
   private readonly audit: MaterialAuditEvent[] = [];
+  private readonly reviews = new Map<string, Review>();
 
   public constructor(
     @Optional()
@@ -178,67 +180,143 @@ export class MaterialsService {
     facts: readonly Fact[],
     evaluatedAt: string,
     goalId?: string,
+    reviewId?: string,
   ): Material {
-    const current = this.requireMaterial(userId, materialId);
-    this.assertVersion(current, expectedVersion);
-    if (current.status !== 'review_required') {
-      throw new MaterialsError(
-        'STATE_TRANSITION_INVALID',
-        'Only review_required material can be approved.',
-      );
-    }
-    if (!current.checks.publishable) {
-      throw new MaterialsError(
-        'MATERIAL_NOT_PUBLISHABLE',
-        'Material has blocking format, citation, or confirmation issues.',
-      );
-    }
+    let current: Material;
+    try {
+      current = this.requireMaterial(userId, materialId);
+      this.assertVersion(current, expectedVersion);
+      this.assertApprovalReview(userId, current, reviewId);
+      if (current.status !== 'review_required') {
+        throw new MaterialsError(
+          'STATE_TRANSITION_INVALID',
+          'Only review_required material can be approved.',
+        );
+      }
+      if (!current.checks.publishable) {
+        throw new MaterialsError(
+          'MATERIAL_NOT_PUBLISHABLE',
+          'Material has blocking format, citation, or confirmation issues.',
+        );
+      }
 
-    const currentValidation = validateMaterialDocument(current.document, facts, {
-      user_id: userId,
-      goal_id: goalId,
-      evaluated_at: evaluatedAt,
-    });
-    if (!currentValidation.checks.publishable) {
-      throw new MaterialsError(
-        'MATERIAL_NOT_PUBLISHABLE',
-        'Material facts are no longer current, allowed, or traceable.',
-      );
+      const currentValidation = validateMaterialDocument(current.document, facts, {
+        user_id: userId,
+        goal_id: goalId,
+        evaluated_at: evaluatedAt,
+      });
+      if (!currentValidation.checks.publishable) {
+        throw new MaterialsError(
+          'MATERIAL_NOT_PUBLISHABLE',
+          'Material facts are no longer current, allowed, or traceable.',
+        );
+      }
+      const approved: Material = {
+        ...clone(current),
+        status: 'approved',
+        version: current.version + 1,
+        fact_citations: currentValidation.citations,
+        checks: { ...current.checks, publishable: true },
+        updated_at: this.clock(),
+      };
+      const snapshot = this.snapshot();
+      try {
+        this.save(approved);
+        this.beforeApprovalCommit();
+        this.recordAudit(approved, 'material.approved', ['status', 'version'], 'succeeded');
+        return clone(approved);
+      } catch {
+        this.restore(snapshot);
+        this.recordAudit(current, 'material.approval_failed', [], 'failed', 'TRANSACTION_FAILED');
+        throw new MaterialsError(
+          'TRANSACTION_FAILED',
+          'Approval transaction failed and was rolled back.',
+        );
+      }
+    } catch (error) {
+      if (error instanceof MaterialsError && error.code !== 'TRANSACTION_FAILED') {
+        this.recordGateAudit(userId, materialId, error.code);
+      }
+      throw error;
     }
-    const approved: Material = {
-      ...clone(current),
-      status: 'approved',
-      version: current.version + 1,
-      fact_citations: currentValidation.citations,
-      checks: {
-        ...current.checks,
-        publishable: true,
-      },
-      updated_at: this.clock(),
-    };
-    this.save(approved);
-    this.recordAudit(approved, 'material.approved', ['status', 'version']);
-    return clone(approved);
   }
 
   public reject(userId: string, materialId: string, expectedVersion: number): Material {
-    const current = this.requireMaterial(userId, materialId);
-    this.assertVersion(current, expectedVersion);
-    if (current.status !== 'review_required') {
-      throw new MaterialsError(
-        'STATE_TRANSITION_INVALID',
-        'Only review_required material can be rejected.',
-      );
+    try {
+      const current = this.requireMaterial(userId, materialId);
+      this.assertVersion(current, expectedVersion);
+      if (current.status !== 'review_required') {
+        throw new MaterialsError(
+          'STATE_TRANSITION_INVALID',
+          'Only review_required material can be rejected.',
+        );
+      }
+      const rejected: Material = {
+        ...clone(current),
+        status: 'rejected',
+        version: current.version + 1,
+        updated_at: this.clock(),
+      };
+      this.save(rejected);
+      this.recordAudit(rejected, 'material.rejected', ['status', 'version'], 'succeeded');
+      return clone(rejected);
+    } catch (error) {
+      if (error instanceof MaterialsError) {
+        this.recordAuditFor(
+          userId,
+          materialId,
+          'material.rejection_rejected',
+          'rejected',
+          error.code,
+        );
+      }
+      throw error;
     }
-    const rejected: Material = {
-      ...clone(current),
-      status: 'rejected',
-      version: current.version + 1,
-      updated_at: this.clock(),
-    };
-    this.save(rejected);
-    this.recordAudit(rejected, 'material.rejected', ['status', 'version']);
-    return clone(rejected);
+  }
+
+  public saveReview(review: Review): Review {
+    if (!review.id.trim() || this.reviews.has(review.id)) {
+      throw new MaterialsError('CONFLICT', 'Review id already exists.');
+    }
+    for (const materialId of review.material_ids) this.requireMaterial(review.user_id, materialId);
+    this.reviews.set(review.id, clone(review));
+    return clone(review);
+  }
+
+  public getReview(userId: string, reviewId: string): Review {
+    const review = this.reviews.get(reviewId);
+    if (!review || review.user_id !== userId) {
+      throw new MaterialsError('RESOURCE_NOT_FOUND', 'Review not found.');
+    }
+    return clone(review);
+  }
+
+  public listReviews(userId: string): Review[] {
+    return [...this.reviews.values()].filter((review) => review.user_id === userId).map(clone);
+  }
+
+  public resolveReviewFinding(userId: string, reviewId: string, findingId: string): Review {
+    const review = this.getReview(userId, reviewId);
+    const finding = review.findings.find((candidate) => candidate.id === findingId);
+    if (!finding) throw new MaterialsError('RESOURCE_NOT_FOUND', 'Review finding not found.');
+    if (finding.status !== 'open') return review;
+    finding.status = 'resolved';
+    review.version += 1;
+    review.updated_at = this.clock();
+    if (review.findings.every((candidate) => candidate.status !== 'open')) {
+      review.status = 'approved';
+      review.recommendation = 'approve';
+    }
+    this.reviews.set(review.id, clone(review));
+    return clone(review);
+  }
+
+  public recordApprovalGateFailure(userId: string, materialId: string, reasonCode: string): void {
+    this.recordAuditFor(userId, materialId, 'material.approval_rejected', 'rejected', reasonCode);
+  }
+
+  public recordRejectionGateFailure(userId: string, materialId: string, reasonCode: string): void {
+    this.recordAuditFor(userId, materialId, 'material.rejection_rejected', 'rejected', reasonCode);
   }
 
   public get(userId: string, materialId: string, version?: number): Material {
@@ -339,6 +417,8 @@ export class MaterialsService {
     material: Material,
     action: MaterialAuditEvent['action'],
     changedFields: string[],
+    outcome?: MaterialAuditEvent['outcome'],
+    reasonCode?: string,
   ): void {
     this.audit.push({
       event_id: this.idFactory(),
@@ -348,8 +428,93 @@ export class MaterialsService {
       action,
       occurred_at: this.clock(),
       changed_fields: [...changedFields],
+      ...(outcome ? { outcome } : {}),
+      ...(reasonCode ? { reason_code: reasonCode } : {}),
     });
   }
+
+  private assertApprovalReview(userId: string, material: Material, reviewId?: string): void {
+    const candidates = reviewId
+      ? [this.reviews.get(reviewId)].filter((review): review is Review => review !== undefined)
+      : [...this.reviews.values()].filter(
+          (review) => review.user_id === userId && review.material_ids.includes(material.id),
+        );
+    const review = candidates.find((candidate) => candidate.user_id === userId);
+    if (!review || !review.material_ids.includes(material.id)) {
+      throw new MaterialsError('REVIEW_REQUIRED', 'An eligible server-side Review is required.');
+    }
+    if (review.findings.some((finding) => isOpenMustFix(finding))) {
+      throw new MaterialsError(
+        'REVIEW_HAS_OPEN_MUST_FIX',
+        'Review contains an open must-fix finding.',
+      );
+    }
+    if (review.status !== 'approved' || review.recommendation !== 'approve') {
+      throw new MaterialsError('REVIEW_NOT_APPROVED', 'Review has not approved this material.');
+    }
+    const materialEvidence = review.findings
+      .flatMap((finding) => finding.evidence_refs)
+      .filter((reference) => reference.type === 'material' && reference.id === material.id);
+    if (
+      materialEvidence.some(
+        (reference) => reference.version !== undefined && reference.version !== material.version,
+      )
+    ) {
+      throw new MaterialsError('REVIEW_STALE', 'Review evidence does not match material version.');
+    }
+  }
+
+  private recordGateAudit(userId: string, materialId: string, reasonCode: string): void {
+    this.recordAuditFor(userId, materialId, 'material.approval_rejected', 'rejected', reasonCode);
+  }
+
+  private recordAuditFor(
+    userId: string,
+    materialId: string,
+    action: MaterialAuditEvent['action'],
+    outcome: NonNullable<MaterialAuditEvent['outcome']>,
+    reasonCode: string,
+  ): void {
+    const material = this.current.get(materialId);
+    this.audit.push({
+      event_id: this.idFactory(),
+      user_id: userId,
+      material_id: materialId,
+      material_version: material?.user_id === userId ? material.version : 0,
+      action,
+      occurred_at: this.clock(),
+      changed_fields: [],
+      outcome,
+      reason_code: reasonCode,
+    });
+  }
+
+  protected beforeApprovalCommit(): void {}
+
+  private snapshot() {
+    return {
+      current: clone(this.current),
+      versions: clone(this.versions),
+      reviews: clone(this.reviews),
+      audit: clone(this.audit),
+    };
+  }
+
+  private restore(snapshot: ReturnType<MaterialsService['snapshot']>): void {
+    replaceMap(this.current, snapshot.current);
+    replaceMap(this.versions, snapshot.versions);
+    replaceMap(this.reviews, snapshot.reviews);
+    this.audit.splice(0, this.audit.length, ...snapshot.audit);
+  }
+}
+
+function isOpenMustFix(finding: ReviewFinding): boolean {
+  return finding.severity === 'must_fix' && finding.status === 'open';
+}
+
+function replaceMap<K, V>(target: Map<K, V>, source: Map<K, V>): void {
+  target.clear();
+  for (const [key, value] of source) target.set(key, value);
 }
 
 function policyContext(input: {

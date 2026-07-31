@@ -22,12 +22,7 @@ export type HardGateName =
   | 'risk';
 export type HardGateResult = 'pass' | 'block' | 'manual';
 export type MatchingDecision = 'eligible' | 'blocked' | 'manual_review';
-export type MatchBand =
-  | 'exceptional'
-  | 'high'
-  | 'worth_applying'
-  | 'review'
-  | 'low';
+export type MatchBand = 'exceptional' | 'high' | 'worth_applying' | 'review' | 'low';
 
 export interface ScoreDimension {
   name: ScoreDimensionName;
@@ -57,10 +52,7 @@ export interface MatchingScore {
 }
 
 export type JobWorkAuthorization =
-  | 'not_required'
-  | 'sponsorship_available'
-  | 'sponsorship_unavailable'
-  | 'unknown';
+  'not_required' | 'sponsorship_available' | 'sponsorship_unavailable' | 'unknown';
 
 /**
  * Structured requirements produced by a deterministic parser or a

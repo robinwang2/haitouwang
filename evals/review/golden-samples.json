@@ -5,7 +5,8 @@
     "expected_status": "approved",
     "expected_recommendation": "approve",
     "expected_category": null,
-    "expected_bucket": null
+    "expected_bucket": null,
+    "expected_findings": []
   },
   {
     "name": "stale cited fact is a contradiction",
@@ -13,7 +14,20 @@
     "expected_status": "requires_changes",
     "expected_recommendation": "revise",
     "expected_category": "fact_contradiction",
-    "expected_bucket": "must_fix"
+    "expected_bucket": "must_fix",
+    "expected_findings": [
+      {
+        "reviewer": "fact_check",
+        "severity": "must_fix",
+        "category": "fact_contradiction",
+        "message": "Claim 40000000-0000-4000-8000-000000000004:v1:name cites a stale, unconfirmed, expired, or disallowed fact version.",
+        "evidence_refs": [
+          { "type": "material", "id": "30000000-0000-4000-8000-000000000003", "version": 1 },
+          { "type": "fact", "id": "40000000-0000-4000-8000-000000000004", "version": 1 }
+        ],
+        "status": "open"
+      }
+    ]
   },
   {
     "name": "claim text adds an invented achievement",
@@ -21,7 +35,20 @@
     "expected_status": "requires_changes",
     "expected_recommendation": "revise",
     "expected_category": "fabricated_claim",
-    "expected_bucket": "must_fix"
+    "expected_bucket": "must_fix",
+    "expected_findings": [
+      {
+        "reviewer": "fact_check",
+        "severity": "must_fix",
+        "category": "fabricated_claim",
+        "message": "Claim 40000000-0000-4000-8000-000000000004:v1:name adds or changes information that is not present in its cited facts.",
+        "evidence_refs": [
+          { "type": "material", "id": "30000000-0000-4000-8000-000000000003", "version": 1 },
+          { "type": "fact", "id": "40000000-0000-4000-8000-000000000004", "version": 1 }
+        ],
+        "status": "open"
+      }
+    ]
   },
   {
     "name": "job description is critically missing",
@@ -29,7 +56,19 @@
     "expected_status": "needs_human",
     "expected_recommendation": "human_review",
     "expected_category": "critical_job_data_missing",
-    "expected_bucket": "human_review"
+    "expected_bucket": "human_review",
+    "expected_findings": [
+      {
+        "reviewer": "hard_requirements",
+        "severity": "must_fix",
+        "category": "critical_job_data_missing",
+        "message": "The job title, company, or job description is missing, so hard requirements cannot be verified.",
+        "evidence_refs": [
+          { "type": "job", "id": "20000000-0000-4000-8000-000000000002", "version": 1 }
+        ],
+        "status": "open"
+      }
+    ]
   },
   {
     "name": "one claim cites conflicting fact values",
@@ -37,7 +76,21 @@
     "expected_status": "needs_human",
     "expected_recommendation": "human_review",
     "expected_category": "evidence_conflict",
-    "expected_bucket": "human_review"
+    "expected_bucket": "human_review",
+    "expected_findings": [
+      {
+        "reviewer": "fact_check",
+        "severity": "must_fix",
+        "category": "evidence_conflict",
+        "message": "Claim 40000000-0000-4000-8000-000000000004:v1:name is supported by conflicting fact values and cannot be revised automatically.",
+        "evidence_refs": [
+          { "type": "material", "id": "30000000-0000-4000-8000-000000000003", "version": 1 },
+          { "type": "fact", "id": "40000000-0000-4000-8000-000000000004", "version": 1 },
+          { "type": "fact", "id": "40000000-0000-4000-8000-000000000005", "version": 1 }
+        ],
+        "status": "open"
+      }
+    ]
   },
   {
     "name": "work authorization facts contain incompatible values",
@@ -45,7 +98,21 @@
     "expected_status": "needs_human",
     "expected_recommendation": "human_review",
     "expected_category": "evidence_conflict",
-    "expected_bucket": "human_review"
+    "expected_bucket": "human_review",
+    "expected_findings": [
+      {
+        "reviewer": "hard_requirements",
+        "severity": "must_fix",
+        "category": "evidence_conflict",
+        "message": "Confirmed work-authorization facts contain incompatible values and require human resolution.",
+        "evidence_refs": [
+          { "type": "job", "id": "20000000-0000-4000-8000-000000000002", "version": 1 },
+          { "type": "fact", "id": "40000000-0000-4000-8000-000000000005", "version": 1 },
+          { "type": "fact", "id": "40000000-0000-4000-8000-000000000006", "version": 1 }
+        ],
+        "status": "open"
+      }
+    ]
   },
   {
     "name": "job is awaiting risk review",
@@ -53,6 +120,18 @@
     "expected_status": "needs_human",
     "expected_recommendation": "human_review",
     "expected_category": "job_risk_requires_review",
-    "expected_bucket": "human_review"
+    "expected_bucket": "human_review",
+    "expected_findings": [
+      {
+        "reviewer": "hard_requirements",
+        "severity": "must_fix",
+        "category": "job_risk_requires_review",
+        "message": "The job status or risk assessment requires a person to review the position before approval.",
+        "evidence_refs": [
+          { "type": "job", "id": "20000000-0000-4000-8000-000000000002", "version": 1 }
+        ],
+        "status": "open"
+      }
+    ]
   }
 ]

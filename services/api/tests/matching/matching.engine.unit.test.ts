@@ -31,9 +31,7 @@ interface GoldenSample {
 }
 
 function readGoldenSamples(): GoldenSample[] {
-  const path = fileURLToPath(
-    new URL('./fixtures/golden-samples.json', import.meta.url),
-  );
+  const path = fileURLToPath(new URL('./fixtures/golden-samples.json', import.meta.url));
   return JSON.parse(readFileSync(path, 'utf8')) as GoldenSample[];
 }
 
@@ -149,48 +147,36 @@ describe('matching weights and golden samples', () => {
       employment_type: 10,
       preference: 5,
     });
-    expect(
-      Object.values(MATCHING_WEIGHTS).reduce((sum, weight) => sum + weight, 0),
-    ).toBe(100);
+    expect(Object.values(MATCHING_WEIGHTS).reduce((sum, weight) => sum + weight, 0)).toBe(100);
   });
 
-  it.each(readGoldenSamples())(
-    'replays the $name score band golden sample',
-    (sample) => {
-      const availableSkills = SKILLS.slice(0, sample.skill_matches);
-      const availableExperience = EXPERIENCE.slice(
-        0,
-        sample.experience_matches,
-      );
-      const input = matchingInput({
-        goal: goal({
-          title_keywords: sample.preference_match
-            ? ['Backend Engineer']
-            : ['Product Designer'],
+  it.each(readGoldenSamples())('replays the $name score band golden sample', (sample) => {
+    const availableSkills = SKILLS.slice(0, sample.skill_matches);
+    const availableExperience = EXPERIENCE.slice(0, sample.experience_matches);
+    const input = matchingInput({
+      goal: goal({
+        title_keywords: sample.preference_match ? ['Backend Engineer'] : ['Product Designer'],
+      }),
+      facts: [
+        ...availableSkills.map((name, index) => fact(index + 1, 'skill', { name })),
+        fact(10, 'experience', {
+          summary: availableExperience.join(', '),
         }),
-        facts: [
-          ...availableSkills.map((name, index) =>
-            fact(index + 1, 'skill', { name }),
-          ),
-          fact(10, 'experience', {
-            summary: availableExperience.join(', '),
-          }),
-        ],
-      });
+      ],
+    });
 
-      const first = scoreMatch(input);
-      const replay = scoreMatch(structuredClone(input));
+    const first = scoreMatch(input);
+    const replay = scoreMatch(structuredClone(input));
 
-      expect(first).toEqual(replay);
-      expect(first.total).toBe(sample.expected_total);
-      expect(classifyMatchScore(first.total)).toBe(sample.expected_band);
-      expect(first.decision).toBe('eligible');
-      expect(first.dimensions).toHaveLength(7);
-      expect(first.hard_gates).toHaveLength(7);
-      expect(first.input_version).toMatch(/^[a-f0-9]{64}$/);
-      expect(first.explanations.every((item) => item.includes('['))).toBe(true);
-    },
-  );
+    expect(first).toEqual(replay);
+    expect(first.total).toBe(sample.expected_total);
+    expect(classifyMatchScore(first.total)).toBe(sample.expected_band);
+    expect(first.decision).toBe('eligible');
+    expect(first.dimensions).toHaveLength(7);
+    expect(first.hard_gates).toHaveLength(7);
+    expect(first.input_version).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.explanations.every((item) => item.includes('['))).toBe(true);
+  });
 });
 
 describe('hard-rule precedence', () => {
@@ -282,9 +268,7 @@ describe('hard-rule precedence', () => {
         }) as MatchingInput,
       );
 
-      expect(result.hard_gates.find((gate) => gate.name === name)?.result).toBe(
-        'block',
-      );
+      expect(result.hard_gates.find((gate) => gate.name === name)?.result).toBe('block');
       expect(result.decision).toBe('blocked');
       expect(result.explanations).toContainEqual(
         expect.stringContaining(`recommendation: ${name} is block`),
@@ -326,23 +310,11 @@ describe('hard-rule precedence', () => {
       facts: [
         fact(1, 'skill', { name: 'TypeScript' }),
         fact(2, 'skill', { name: 'Node.js' }, { status: 'pending_confirmation' }),
-        fact(
-          3,
-          'skill',
-          { name: 'PostgreSQL' },
-          { scope: { use: 'manual_only' } },
-        ),
-        fact(
-          4,
-          'skill',
-          { name: 'AWS' },
-          { valid_until: '2026-07-29T12:00:00.000Z' },
-        ),
+        fact(3, 'skill', { name: 'PostgreSQL' }, { scope: { use: 'manual_only' } }),
+        fact(4, 'skill', { name: 'AWS' }, { valid_until: '2026-07-29T12:00:00.000Z' }),
       ],
     });
 
-    expect(
-      scoreMatch(input).dimensions.find((item) => item.name === 'skills')?.score,
-    ).toBe(25);
+    expect(scoreMatch(input).dimensions.find((item) => item.name === 'skills')?.score).toBe(25);
   });
 });
