@@ -41,6 +41,8 @@ export interface Review {
   user_id: string;
   job_id: string;
   material_ids: string[];
+  /** Immutable material versions evaluated by this Review, keyed by material id. */
+  material_versions: Record<string, number>;
   status: ReviewStatus;
   reviewers: RequiredReviewer[];
   findings: ReviewFinding[];

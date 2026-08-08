@@ -164,16 +164,25 @@ export interface MaterialExport {
 
 export interface MaterialAuditEvent {
   event_id: string;
+  /** Tenant/resource owner used to partition audit queries. */
   user_id: string;
+  /** The authenticated caller, or the explicit anonymous system identity. */
+  actor: { type: 'user' | 'system'; id: string };
   material_id: string;
   material_version: number;
   action:
     | 'material.draft_created'
     | 'material.draft_revised'
     | 'material.approved'
+    | 'material.approval_rejected'
+    | 'material.approval_failed'
     | 'material.rejected'
+    | 'material.rejection_rejected'
+    | 'material.rejection_failed'
     | 'material.superseded'
     | 'material.exported';
   occurred_at: string;
   changed_fields: string[];
+  outcome?: 'succeeded' | 'rejected' | 'failed';
+  reason_code?: string;
 }

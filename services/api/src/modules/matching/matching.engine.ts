@@ -33,10 +33,7 @@ export function scoreMatch(input: MatchingInput): MatchingScore {
   const dimensions: ScoreDimension[] = [
     dimension(
       'skills',
-      coverageScore(
-        input.requirements.required_skills,
-        factTerms(facts, ['skill']),
-      ),
+      coverageScore(input.requirements.required_skills, factTerms(facts, ['skill'])),
       ['requirements.required_skills', 'facts[kind=skill].value'],
     ),
     dimension(
@@ -45,49 +42,33 @@ export function scoreMatch(input: MatchingInput): MatchingScore {
         input.requirements.experience_keywords,
         factTerms(facts, ['experience', 'project']),
       ),
-      [
-        'requirements.experience_keywords',
-        'facts[kind=experience|project].value',
-      ],
+      ['requirements.experience_keywords', 'facts[kind=experience|project].value'],
     ),
-    dimension(
-      'work_authorization',
-      gateScore(requiredGate(gateByName, 'work_authorization')),
-      ['goal.work_authorization_rule', 'requirements.work_authorization'],
-    ),
-    dimension(
-      'location',
-      gateScore(requiredGate(gateByName, 'location')),
-      ['goal.locations', 'job.location'],
-    ),
-    dimension(
-      'salary',
-      gateScore(requiredGate(gateByName, 'salary')),
-      ['goal.salary', 'job.salary'],
-    ),
-    dimension(
-      'employment_type',
-      gateScore(requiredGate(gateByName, 'employment_type')),
-      ['goal.employment_types', 'job.employment_type'],
-    ),
-    dimension(
-      'preference',
-      preferenceScore(input, facts),
-      [
-        'goal.title_keywords',
-        'requirements.preference_keywords',
-        'facts[kind=preference].value',
-        'job.title',
-      ],
-    ),
+    dimension('work_authorization', gateScore(requiredGate(gateByName, 'work_authorization')), [
+      'goal.work_authorization_rule',
+      'requirements.work_authorization',
+    ]),
+    dimension('location', gateScore(requiredGate(gateByName, 'location')), [
+      'goal.locations',
+      'job.location',
+    ]),
+    dimension('salary', gateScore(requiredGate(gateByName, 'salary')), [
+      'goal.salary',
+      'job.salary',
+    ]),
+    dimension('employment_type', gateScore(requiredGate(gateByName, 'employment_type')), [
+      'goal.employment_types',
+      'job.employment_type',
+    ]),
+    dimension('preference', preferenceScore(input, facts), [
+      'goal.title_keywords',
+      'requirements.preference_keywords',
+      'facts[kind=preference].value',
+      'job.title',
+    ]),
   ];
 
-  const total = round(
-    dimensions.reduce(
-      (sum, item) => sum + (item.weight * item.score) / 100,
-      0,
-    ),
-  );
+  const total = round(dimensions.reduce((sum, item) => sum + (item.weight * item.score) / 100, 0));
   const decision = decisionFromGates(hardGates);
   const inputVersion = hashCanonical(scoringPayload(input));
 
@@ -126,21 +107,17 @@ export function classifyMatchScore(total: number): MatchBand {
 
 function evaluateHardGates(input: MatchingInput): HardGate[] {
   return [
-    gate(
-      'work_authorization',
-      workAuthorizationGate(input),
-      ['goal.work_authorization_rule', 'requirements.work_authorization'],
-    ),
+    gate('work_authorization', workAuthorizationGate(input), [
+      'goal.work_authorization_rule',
+      'requirements.work_authorization',
+    ]),
     gate('blacklist', blacklistGate(input), [
       'context.blacklisted_companies',
       'context.blacklisted_title_keywords',
       'job.company',
       'job.title',
     ]),
-    gate('duplicate', duplicateGate(input), [
-      'context.already_applied_job_ids',
-      'job.id',
-    ]),
+    gate('duplicate', duplicateGate(input), ['context.already_applied_job_ids', 'job.id']),
     gate('location', locationGate(input), ['goal.locations', 'job.location']),
     gate('salary', salaryGate(input), ['goal.salary', 'job.salary']),
     gate('employment_type', employmentTypeGate(input), [
@@ -187,17 +164,13 @@ function blacklistGate(input: MatchingInput): HardGateResult {
 }
 
 function duplicateGate(input: MatchingInput): HardGateResult {
-  return input.context.already_applied_job_ids.includes(input.job.id)
-    ? 'block'
-    : 'pass';
+  return input.context.already_applied_job_ids.includes(input.job.id) ? 'block' : 'pass';
 }
 
 function locationGate(input: MatchingInput): HardGateResult {
   if (input.goal.locations.length === 0) return 'pass';
   if (normalize(input.job.location) === 'unknown') return 'manual';
-  return input.goal.locations.some((location) =>
-    termsMatch(location, input.job.location),
-  )
+  return input.goal.locations.some((location) => termsMatch(location, input.job.location))
     ? 'pass'
     : 'block';
 }
@@ -242,9 +215,7 @@ function salaryGate(input: MatchingInput): HardGateResult {
 function employmentTypeGate(input: MatchingInput): HardGateResult {
   if (input.goal.employment_types.length === 0) return 'pass';
   if (input.job.employment_type === 'unknown') return 'manual';
-  return input.goal.employment_types.includes(input.job.employment_type)
-    ? 'pass'
-    : 'block';
+  return input.goal.employment_types.includes(input.job.employment_type) ? 'pass' : 'block';
 }
 
 function riskGate(input: MatchingInput): HardGateResult {
@@ -279,15 +250,12 @@ function usableFacts(input: MatchingInput): Fact[] {
     if (
       fact.scope.use === 'manual_only' ||
       fact.scope.use === 'prohibited' ||
-      (fact.scope.use === 'selected_goals' &&
-        !fact.scope.goal_ids?.includes(input.goal.id))
+      (fact.scope.use === 'selected_goals' && !fact.scope.goal_ids?.includes(input.goal.id))
     ) {
       return false;
     }
-    const validFrom =
-      fact.valid_from === undefined ? undefined : Date.parse(fact.valid_from);
-    const validUntil =
-      fact.valid_until === undefined ? undefined : Date.parse(fact.valid_until);
+    const validFrom = fact.valid_from === undefined ? undefined : Date.parse(fact.valid_from);
+    const validUntil = fact.valid_until === undefined ? undefined : Date.parse(fact.valid_until);
     return (
       (validFrom === undefined || validFrom <= evaluatedAt) &&
       (validUntil === undefined || validUntil >= evaluatedAt)
@@ -295,10 +263,7 @@ function usableFacts(input: MatchingInput): Fact[] {
   });
 }
 
-function factTerms(
-  facts: Fact[],
-  kinds: Fact['kind'][],
-): string[] {
+function factTerms(facts: Fact[], kinds: Fact['kind'][]): string[] {
   return facts
     .filter((fact) => kinds.includes(fact.kind))
     .flatMap((fact) =>
@@ -355,11 +320,7 @@ function dimension(
   };
 }
 
-function gate(
-  name: HardGate['name'],
-  result: HardGateResult,
-  evidencePaths: string[],
-): HardGate {
+function gate(name: HardGate['name'], result: HardGateResult, evidencePaths: string[]): HardGate {
   return { name, result, evidence_paths: evidencePaths };
 }
 
@@ -388,10 +349,7 @@ function decisionFromGates(gates: HardGate[]): MatchingDecision {
   return 'eligible';
 }
 
-function buildExplanations(
-  dimensions: ScoreDimension[],
-  gates: HardGate[],
-): string[] {
+function buildExplanations(dimensions: ScoreDimension[], gates: HardGate[]): string[] {
   const explanations = dimensions.map((item) => {
     const category = item.score >= 80 ? 'strength' : 'gap';
     return `${category}: ${item.name} scored ${item.score}/100 [${item.evidence_paths.join(', ')}]`;
@@ -399,9 +357,7 @@ function buildExplanations(
   for (const gateItem of gates.filter((item) => item.result !== 'pass')) {
     explanations.push(
       `recommendation: ${gateItem.name} is ${gateItem.result}; ${
-        gateItem.result === 'block'
-          ? 'do not proceed'
-          : 'require human confirmation'
+        gateItem.result === 'block' ? 'do not proceed' : 'require human confirmation'
       } [${gateItem.evidence_paths.join(', ')}]`,
     );
   }
@@ -418,10 +374,7 @@ function validateInput(input: MatchingInput): void {
   if (input.facts.some((fact) => fact.user_id !== input.user_id)) {
     throw new MatchingInputError('facts must belong to user_id.');
   }
-  const weightTotal = DIMENSION_ORDER.reduce(
-    (sum, name) => sum + MATCHING_WEIGHTS[name],
-    0,
-  );
+  const weightTotal = DIMENSION_ORDER.reduce((sum, name) => sum + MATCHING_WEIGHTS[name], 0);
   if (weightTotal !== 100) {
     throw new MatchingInputError('Matching weights must total 100.');
   }
@@ -440,7 +393,9 @@ function scoringPayload(input: MatchingInput): MatchingInput {
 }
 
 function hashCanonical(value: unknown): string {
-  return createHash('sha256').update(JSON.stringify(stableValue(value))).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify(stableValue(value)))
+    .digest('hex');
 }
 
 function stableValue(value: unknown): unknown {

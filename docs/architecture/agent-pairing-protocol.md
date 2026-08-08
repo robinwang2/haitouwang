@@ -29,17 +29,17 @@ Web 用户会话、代理控制凭证和目标站点浏览器会话使用不同�
 
 access token 至少包含：
 
-| 声明 | 约束 |
-|---|---|
-| `iss` | 云端控制面固定签发者 |
-| `sub` | `agent_id` |
-| `tenant_id` / `user_id` | 与代理绑定用户一致 |
-| `aud` | 固定 `local-agent-control` |
-| `scope` | `agent:commands:claim`、`agent:receipts:write`、`agent:heartbeat:write` 的最小集合 |
-| `iat` / `nbf` / `exp` | 短期有效，允许的时钟偏差不超过 60 秒 |
-| `jti` | 全局唯一；敏感操作保留消费记录 |
-| `cnf` | 设备公钥指纹，要求请求持有证明 |
-| `authorization_version` | 与云端当前授权版本相等；撤权后递增 |
+| 声明                    | 约束                                                                               |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| `iss`                   | 云端控制面固定签发者                                                               |
+| `sub`                   | `agent_id`                                                                         |
+| `tenant_id` / `user_id` | 与代理绑定用户一致                                                                 |
+| `aud`                   | 固定 `local-agent-control`                                                         |
+| `scope`                 | `agent:commands:claim`、`agent:receipts:write`、`agent:heartbeat:write` 的最小集合 |
+| `iat` / `nbf` / `exp`   | 短期有效，允许的时钟偏差不超过 60 秒                                               |
+| `jti`                   | 全局唯一；敏感操作保留消费记录                                                     |
+| `cnf`                   | 设备公钥指纹，要求请求持有证明                                                     |
+| `authorization_version` | 与云端当前授权版本相等；撤权后递增                                                 |
 
 每个代理请求还包含签名时间、请求 nonce 和请求体摘要。云端校验 TLS、令牌签名/受众/范围/时效、设备持有证明、授权版本和 nonce；任一失败均不执行业务动作。
 

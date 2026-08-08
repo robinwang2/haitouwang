@@ -131,7 +131,15 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": ["pending_confirmation", "active", "expired", "rejected", "revoked", "prohibited", "deleted"]
+              "enum": [
+                "pending_confirmation",
+                "active",
+                "expired",
+                "rejected",
+                "revoked",
+                "prohibited",
+                "deleted"
+              ]
             }
           }
         ],
@@ -235,6 +243,89 @@
               }
             }
           },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/materials/{material_id}/approve": {
+      "post": {
+        "tags": ["Materials"],
+        "operationId": "approveMaterial",
+        "summary": "Approve a material after a server-side Review gate",
+        "description": "The authenticated principal supplies no tenant identity. The server reads the persisted Review and material in one consistency boundary and rejects missing, stale, non-approved, or open must-fix Reviews.",
+        "x-required-user-permission": "material:approve",
+        "x-audit-event": "material.approved_or_rejected",
+        "parameters": [
+          {
+            "name": "material_id",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/Uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ApproveMaterialRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Material approved",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Material" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "412": { "$ref": "#/components/responses/PreconditionFailed" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/materials/{material_id}/reject": {
+      "post": {
+        "tags": ["Materials"],
+        "operationId": "rejectMaterial",
+        "summary": "Reject a material with an audited server-side transition",
+        "description": "The material transition and success audit commit atomically. A rejected request records material.rejection_rejected; an unexpected persistence failure rolls back the transition and records material.rejection_failed in an independent transaction.",
+        "x-required-user-permission": "material:approve",
+        "x-audit-event": "material.rejected_or_rejection_rejected_or_rejection_failed",
+        "parameters": [
+          {
+            "name": "material_id",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/Uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RejectMaterialRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Material rejected",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Material" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "default": { "$ref": "#/components/responses/Error" }
         }
@@ -385,6 +476,71 @@
               }
             }
           },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/reviews/{review_id}": {
+      "get": {
+        "tags": ["Reviews"],
+        "operationId": "getReview",
+        "summary": "Get a tenant-owned persisted Review",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/Uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Persisted Review",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Review" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/reviews/{review_id}/findings/{finding_id}/resolve": {
+      "post": {
+        "tags": ["Reviews"],
+        "operationId": "resolveReviewFinding",
+        "summary": "Resolve a Review finding before material approval",
+        "x-required-user-permission": "material:approve",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/Uuid" }
+          },
+          {
+            "name": "finding_id",
+            "in": "path",
+            "required": true,
+            "schema": { "$ref": "#/components/schemas/Uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated Review",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Review" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "default": { "$ref": "#/components/responses/Error" }
         }
@@ -1533,7 +1689,18 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["identity", "contact", "summary", "experience", "education", "skill", "certification", "project", "work_authorization", "preference"]
+            "enum": [
+              "identity",
+              "contact",
+              "summary",
+              "experience",
+              "education",
+              "skill",
+              "certification",
+              "project",
+              "work_authorization",
+              "preference"
+            ]
           },
           "value": {
             "type": "object",
@@ -1606,6 +1773,39 @@
           }
         }
       },
+      "ApproveMaterialRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expected_version", "facts", "evaluated_at", "review_id"],
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "facts": {
+            "type": "array",
+            "maxItems": 500,
+            "items": { "$ref": "#/components/schemas/Fact" }
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "goal_id": { "$ref": "#/components/schemas/Uuid" },
+          "review_id": { "$ref": "#/components/schemas/Uuid" }
+        }
+      },
+      "RejectMaterialRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expected_version"],
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
       "ImportJobRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -1648,7 +1848,15 @@
             "uniqueItems": true,
             "items": {
               "type": "string",
-              "enum": ["ats", "hard_requirements", "matching", "skeptical_recruiter", "hiring_manager", "fact_check", "naturalness"]
+              "enum": [
+                "ats",
+                "hard_requirements",
+                "matching",
+                "skeptical_recruiter",
+                "hiring_manager",
+                "fact_check",
+                "naturalness"
+              ]
             }
           }
         }
@@ -1673,7 +1881,14 @@
       "PairingSessionCreated": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["pairing_session_id", "pairing_secret", "pairing_uri", "display_code", "challenge", "expires_at"],
+        "required": [
+          "pairing_session_id",
+          "pairing_secret",
+          "pairing_uri",
+          "display_code",
+          "challenge",
+          "expires_at"
+        ],
         "properties": {
           "pairing_session_id": { "$ref": "#/components/schemas/Uuid" },
           "pairing_secret": {
@@ -1757,7 +1972,14 @@
       "PairingClaimed": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["pairing_session_id", "status", "device_name", "public_key_thumbprint", "display_code", "expires_at"],
+        "required": [
+          "pairing_session_id",
+          "status",
+          "device_name",
+          "public_key_thumbprint",
+          "display_code",
+          "expires_at"
+        ],
         "properties": {
           "pairing_session_id": { "$ref": "#/components/schemas/Uuid" },
           "status": { "const": "claimed" },
@@ -1845,7 +2067,14 @@
       "AgentTokenResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["access_token", "token_type", "expires_in", "refresh_token", "scope", "authorization_version"],
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "refresh_token",
+          "scope",
+          "authorization_version"
+        ],
         "properties": {
           "access_token": {
             "type": "string",
@@ -1888,7 +2117,13 @@
             "uniqueItems": true,
             "items": {
               "type": "string",
-              "enum": ["greenhouse_fill", "lever_fill", "file_upload", "preview", "submit_after_confirmation"]
+              "enum": [
+                "greenhouse_fill",
+                "lever_fill",
+                "file_upload",
+                "preview",
+                "submit_after_confirmation"
+              ]
             }
           },
           "wait_seconds": {
@@ -1901,7 +2136,17 @@
       "AgentCommand": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["command_id", "type", "idempotency_key", "nonce", "issued_at", "expires_at", "resource", "payload", "signature"],
+        "required": [
+          "command_id",
+          "type",
+          "idempotency_key",
+          "nonce",
+          "issued_at",
+          "expires_at",
+          "resource",
+          "payload",
+          "signature"
+        ],
         "properties": {
           "command_id": { "$ref": "#/components/schemas/Uuid" },
           "type": {
@@ -1994,7 +2239,14 @@
           },
           "status": {
             "type": "string",
-            "enum": ["accepted", "started", "paused", "completed", "rejected", "manual_intervention_required"]
+            "enum": [
+              "accepted",
+              "started",
+              "paused",
+              "completed",
+              "rejected",
+              "manual_intervention_required"
+            ]
           },
           "occurred_at": { "$ref": "#/components/schemas/Timestamp" },
           "manual_reason": {
@@ -2046,7 +2298,14 @@
           },
           "status": {
             "type": "string",
-            "enum": ["accepted", "started", "paused", "completed", "rejected", "manual_intervention_required"]
+            "enum": [
+              "accepted",
+              "started",
+              "paused",
+              "completed",
+              "rejected",
+              "manual_intervention_required"
+            ]
           },
           "recorded_at": { "$ref": "#/components/schemas/Timestamp" }
         }
@@ -2054,7 +2313,13 @@
       "HeartbeatRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["agent_version", "status", "capabilities", "authorization_version", "observed_at"],
+        "required": [
+          "agent_version",
+          "status",
+          "capabilities",
+          "authorization_version",
+          "observed_at"
+        ],
         "properties": {
           "agent_version": {
             "type": "string",
@@ -2070,7 +2335,13 @@
             "uniqueItems": true,
             "items": {
               "type": "string",
-              "enum": ["greenhouse_fill", "lever_fill", "file_upload", "preview", "submit_after_confirmation"]
+              "enum": [
+                "greenhouse_fill",
+                "lever_fill",
+                "file_upload",
+                "preview",
+                "submit_after_confirmation"
+              ]
             }
           },
           "authorization_version": {
@@ -2132,7 +2403,15 @@
       "CreateInterviewRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["application_id", "round", "status", "start_at", "end_at", "time_zone", "source"],
+        "required": [
+          "application_id",
+          "round",
+          "status",
+          "start_at",
+          "end_at",
+          "time_zone",
+          "source"
+        ],
         "properties": {
           "application_id": { "$ref": "#/components/schemas/Uuid" },
           "round": {

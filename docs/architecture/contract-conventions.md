@@ -7,14 +7,14 @@
 
 ## 1. 规范文件与所有权
 
-| 文件 | 用途 |
-|---|---|
-| `contracts/openapi/openapi.json` | 云端 Web API 与云地代理 API |
-| `contracts/schemas/domain.schema.json` | 领域对象、枚举和公共值对象 |
-| `contracts/events/event.schema.json` | 版本化事件信封和事件载荷 |
-| `contracts/examples/*.event.json` | 成功、拒绝、人工降级事件样例 |
-| `docs/architecture/domain-model.md` | 聚合、关系、不变量和字段语义 |
-| `docs/architecture/state-machines.md` | 合法状态迁移和迁移门禁 |
+| 文件                                          | 用途                                           |
+| --------------------------------------------- | ---------------------------------------------- |
+| `contracts/openapi/openapi.json`              | 云端 Web API 与云地代理 API                    |
+| `contracts/schemas/domain.schema.json`        | 领域对象、枚举和公共值对象                     |
+| `contracts/events/event.schema.json`          | 版本化事件信封和事件载荷                       |
+| `contracts/examples/*.event.json`             | 成功、拒绝、人工降级事件样例                   |
+| `docs/architecture/domain-model.md`           | 聚合、关系、不变量和字段语义                   |
+| `docs/architecture/state-machines.md`         | 合法状态迁移和迁移门禁                         |
 | `docs/architecture/agent-pairing-protocol.md` | 云端与本地代理配对、领取、回执、心跳、撤权协议 |
 
 `contracts/**` 是跨模块机器契约的唯一来源。实现层不得私自放宽枚举、必填字段、状态迁移或安全约束；需要变更时先修改契约并完成兼容性评审。
@@ -37,17 +37,17 @@
 
 所有非 2xx 响应使用 `ErrorEnvelope`，至少包含稳定机器码 `error.code`、安全的人类可读信息、`request_id`、`correlation_id`、`retryable`。不得在错误正文或日志中包含 Authorization、Cookie、验证码、原始凭证、简历/邮件正文或完整模型提示。
 
-| HTTP | 稳定错误码 | 使用条件 |
-|---:|---|---|
-| 400 | `VALIDATION_FAILED`, `CREDENTIAL_DATA_FORBIDDEN` | 格式/字段错误；请求携带禁止上云的凭证类字段 |
-| 401 | `AUTH_REQUIRED`, `TOKEN_EXPIRED`, `TOKEN_REVOKED` | 未认证、令牌过期或已撤权 |
-| 403 | `FORBIDDEN`, `TOKEN_SCOPE_INSUFFICIENT` | 跨租户、越范围或策略拒绝 |
-| 404 | `RESOURCE_NOT_FOUND` | 资源不存在，跨租户查询同样返回该码以避免枚举 |
-| 409 | `CONFLICT`, `IDEMPOTENCY_KEY_REUSED`, `STATE_TRANSITION_INVALID`, `REPLAY_DETECTED` | 版本/唯一性冲突、幂等键异参复用、非法迁移、重放 |
-| 412 | `PRECONDITION_REQUIRED`, `EVIDENCE_REQUIRED` | 缺少用户确认或可验证提交证据 |
-| 422 | `MANUAL_INTERVENTION_REQUIRED`, `PAIRING_CODE_INVALID` | 必须人工接管；一次性配对材料无效 |
-| 429 | `RATE_LIMITED` | 限流，附 `Retry-After` |
-| 500 | `INTERNAL_ERROR` | 未分类服务错误；正文不暴露内部堆栈 |
+| HTTP | 稳定错误码                                                                          | 使用条件                                        |
+| ---: | ----------------------------------------------------------------------------------- | ----------------------------------------------- |
+|  400 | `VALIDATION_FAILED`, `CREDENTIAL_DATA_FORBIDDEN`                                    | 格式/字段错误；请求携带禁止上云的凭证类字段     |
+|  401 | `AUTH_REQUIRED`, `TOKEN_EXPIRED`, `TOKEN_REVOKED`                                   | 未认证、令牌过期或已撤权                        |
+|  403 | `FORBIDDEN`, `TOKEN_SCOPE_INSUFFICIENT`                                             | 跨租户、越范围或策略拒绝                        |
+|  404 | `RESOURCE_NOT_FOUND`                                                                | 资源不存在，跨租户查询同样返回该码以避免枚举    |
+|  409 | `CONFLICT`, `IDEMPOTENCY_KEY_REUSED`, `STATE_TRANSITION_INVALID`, `REPLAY_DETECTED` | 版本/唯一性冲突、幂等键异参复用、非法迁移、重放 |
+|  412 | `PRECONDITION_REQUIRED`, `EVIDENCE_REQUIRED`                                        | 缺少用户确认或可验证提交证据                    |
+|  422 | `MANUAL_INTERVENTION_REQUIRED`, `PAIRING_CODE_INVALID`                              | 必须人工接管；一次性配对材料无效                |
+|  429 | `RATE_LIMITED`                                                                      | 限流，附 `Retry-After`                          |
+|  500 | `INTERNAL_ERROR`                                                                    | 未分类服务错误；正文不暴露内部堆栈              |
 
 人工降级不是可自动重试的普通失败。返回 `MANUAL_INTERVENTION_REQUIRED` 时，`retryable=false`，并给出稳定 `manual_reason`；只有用户解决问题或显式恢复流程后才可创建新尝试。
 

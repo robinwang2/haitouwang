@@ -9,6 +9,7 @@ import {
   validateMaterialDocument,
 } from '../../src/modules/materials';
 import type { Fact, FileMetadata } from '../../src/modules/profile';
+import type { Material } from '../../src/modules/materials';
 
 import { GOAL_ID, NOW, USER_ID, fact, materialFacts } from './fixtures/material-facts';
 
@@ -105,15 +106,13 @@ describe('material formatting, versions and lifecycle', () => {
       item.kind === 'education' ? { ...item, version: 2 } : item,
     );
 
-    expect(() =>
-      service.approve(USER_ID, draft.id, draft.version, changedFacts, NOW, GOAL_ID),
-    ).toThrowError(
+    expect(() => approveMaterial(service, draft, changedFacts)).toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({
         code: 'MATERIAL_NOT_PUBLISHABLE',
       }),
     );
 
-    const approved = service.approve(USER_ID, draft.id, draft.version, facts, NOW, GOAL_ID);
+    const approved = approveMaterial(service, draft, facts);
     const replacement = service.revise(USER_ID, approved.id, approved.version, {
       goal_id: GOAL_ID,
       facts,
@@ -140,9 +139,7 @@ describe('material formatting, versions and lifecycle', () => {
       pending_claims: [{ text: 'Unconfirmed claim' }],
     });
 
-    expect(() =>
-      service.approve(USER_ID, pending.id, pending.version, materialFacts(), NOW, GOAL_ID),
-    ).toThrowError(
+    expect(() => approveMaterial(service, pending, materialFacts())).toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({
         code: 'MATERIAL_NOT_PUBLISHABLE',
       }),
@@ -171,7 +168,7 @@ describe('material base resume and exports', () => {
     const service = deterministicService();
     const facts = materialFacts();
     const draft = service.generate(generationInput(facts));
-    const approved = service.approve(USER_ID, draft.id, draft.version, facts, NOW, GOAL_ID);
+    const approved = approveMaterial(service, draft, facts);
 
     const text = service.export(USER_ID, approved.id, approved.version, 'text');
     const docx = service.export(USER_ID, approved.id, approved.version, 'docx');
@@ -196,7 +193,7 @@ describe('material base resume and exports', () => {
       fact(index + 1, 'skill', { 技能名称: `分布式技能${index}` }),
     );
     const draft = service.generate(generationInput(facts));
-    const approved = service.approve(USER_ID, draft.id, draft.version, facts, NOW, GOAL_ID);
+    const approved = approveMaterial(service, draft, facts);
     const pdf = service.export(USER_ID, approved.id, approved.version, 'pdf');
     const body = Buffer.from(pdf.bytes).toString('binary');
 
@@ -225,6 +222,34 @@ function generationInput(facts: readonly Fact[]) {
     facts,
     evaluated_at: NOW,
   };
+}
+
+function approveMaterial(
+  service: MaterialsService,
+  material: Material,
+  facts: readonly Fact[],
+): Material {
+  let review = service
+    .listReviews(USER_ID)
+    .find((candidate) => candidate.material_ids.includes(material.id));
+  if (!review) {
+    review = service.saveReview({
+      id: `80000000-0000-4000-8000-${material.id.slice(-12)}`,
+      user_id: USER_ID,
+      job_id: material.job_id!,
+      material_ids: [material.id],
+      material_versions: { [material.id]: material.version },
+      status: 'approved',
+      reviewers: ['ats', 'hard_requirements', 'fact_check', 'naturalness'],
+      findings: [],
+      recommendation: 'approve',
+      round: 1,
+      version: 3,
+      created_at: NOW,
+      updated_at: NOW,
+    });
+  }
+  return service.approve(USER_ID, material.id, material.version, facts, NOW, GOAL_ID, review.id);
 }
 
 function deterministicService(): MaterialsService {

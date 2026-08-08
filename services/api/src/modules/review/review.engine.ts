@@ -155,6 +155,9 @@ export async function runReview(
       user_id: request.user_id,
       job_id: request.job.id,
       material_ids: request.materials.map((material) => material.id),
+      material_versions: Object.fromEntries(
+        request.materials.map((material) => [material.id, material.version]),
+      ),
       status: terminal.status,
       reviewers: [...REQUIRED_REVIEWERS],
       findings,
