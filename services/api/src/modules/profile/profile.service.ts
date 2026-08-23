@@ -3,7 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 
 import { ProfileError } from './profile.errors';
-import { InMemoryProfileStore } from './profile.store';
+import { PROFILE_STORE } from './profile-store.interface';
+import type { ProfileStore } from './profile-store.interface';
 import type {
   AuditEvent,
   CreateFactInput,
@@ -70,15 +71,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 @Injectable()
 export class ProfileService {
   constructor(
-    @Inject(InMemoryProfileStore)
-    private readonly store: InMemoryProfileStore,
+    @Inject(PROFILE_STORE)
+    private readonly store: ProfileStore,
   ) {}
 
-  createGoal(userId: string, input: CreateGoalInput, context: MutationContext): Goal {
+  async createGoal(userId: string, input: CreateGoalInput, context: MutationContext): Promise<Goal> {
     this.validateUserAndContext(userId, context);
     this.validateGoalInput(input);
 
-    return this.mutate(userId, 'createGoal', input, context, () => {
+    return this.mutate(userId, 'createGoal', input, context, async (store) => {
       const now = this.now();
       const goal: Goal = {
         ...clone(input),
@@ -88,8 +89,13 @@ export class ProfileService {
         created_at: now,
         updated_at: now,
       };
-      this.store.goals.set(goal.id, clone(goal));
-      this.recordVersion(this.store.goalVersions, goal, now);
+      await store.saveGoal(userId, goal);
+      await store.appendGoalVersion(userId, {
+        resource_id: goal.id,
+        version: goal.version,
+        recorded_at: now,
+        snapshot: clone(goal),
+      });
       return {
         result: goal,
         audit: {
@@ -112,33 +118,27 @@ export class ProfileService {
     });
   }
 
-  getGoal(userId: string, goalId: string): Goal {
-    return clone(this.requireOwned(this.store.goals, userId, goalId, 'goal'));
+  async getGoal(userId: string, goalId: string): Promise<Goal> {
+    return this.requireOwned(userId, goalId, 'goal', () => this.store.getGoal(userId, goalId));
   }
 
-  listGoals(userId: string, includeArchived = false): Goal[] {
-    this.validateUuid(userId, 'user_id');
-    return [...this.store.goals.values()]
-      .filter((goal) => goal.user_id === userId && (includeArchived || goal.status !== 'archived'))
-      .sort((left, right) =>
-        `${left.created_at}:${left.id}`.localeCompare(`${right.created_at}:${right.id}`),
-      )
-      .map(clone);
+  async listGoals(userId: string, includeArchived = false): Promise<Goal[]> {
+    return this.listGoalsFrom(this.store, userId, includeArchived);
   }
 
-  updateGoal(
+  async updateGoal(
     userId: string,
     goalId: string,
     expectedVersion: number,
     input: UpdateGoalInput,
     context: MutationContext,
-  ): Goal {
+  ): Promise<Goal> {
     this.validateUserAndContext(userId, context);
     this.validateNonEmptyUpdate(input);
     this.validateGoalPatch(input);
 
-    return this.mutate(userId, 'updateGoal', { goalId, expectedVersion, input }, context, () => {
-      const current = this.requireOwned(this.store.goals, userId, goalId, 'goal');
+    return this.mutate(userId, 'updateGoal', { goalId, expectedVersion, input }, context, async (store) => {
+      const current = await this.requireOwned(userId, goalId, 'goal', () => store.getGoal(userId, goalId));
       this.assertVersion(current.version, expectedVersion);
       const now = this.now();
       const updated: Goal = {
@@ -150,8 +150,13 @@ export class ProfileService {
         created_at: current.created_at,
         updated_at: now,
       };
-      this.store.goals.set(goalId, clone(updated));
-      this.recordVersion(this.store.goalVersions, updated, now);
+      await store.saveGoal(userId, updated);
+      await store.appendGoalVersion(userId, {
+        resource_id: updated.id,
+        version: updated.version,
+        recorded_at: now,
+        snapshot: clone(updated),
+      });
       return {
         result: updated,
         audit: {
@@ -166,19 +171,19 @@ export class ProfileService {
     });
   }
 
-  deleteGoal(
+  async deleteGoal(
     userId: string,
     goalId: string,
     expectedVersion: number,
     context: MutationContext,
-  ): void {
+  ): Promise<void> {
     this.validateUserAndContext(userId, context);
-    this.mutate(userId, 'deleteGoal', { goalId, expectedVersion }, context, () => {
-      const current = this.requireOwned(this.store.goals, userId, goalId, 'goal');
+    await this.mutate(userId, 'deleteGoal', { goalId, expectedVersion }, context, async (store) => {
+      const current = await this.requireOwned(userId, goalId, 'goal', () => store.getGoal(userId, goalId));
       this.assertVersion(current.version, expectedVersion);
-      this.store.goals.delete(goalId);
-      this.store.goalVersions.delete(goalId);
-      this.purgeIdempotencyForResource(userId, goalId);
+      await store.deleteGoal(userId, goalId);
+      await store.deleteGoalVersions(userId, goalId);
+      await store.deleteIdempotencyForResource(userId, goalId);
       return {
         result: undefined,
         audit: {
@@ -193,16 +198,16 @@ export class ProfileService {
     });
   }
 
-  getGoalVersions(userId: string, goalId: string): VersionRecord<Goal>[] {
-    this.requireOwned(this.store.goals, userId, goalId, 'goal');
-    return clone(this.store.goalVersions.get(goalId) ?? []);
+  async getGoalVersions(userId: string, goalId: string): Promise<VersionRecord<Goal>[]> {
+    await this.requireOwned(userId, goalId, 'goal', () => this.store.getGoal(userId, goalId));
+    return this.store.listGoalVersions(userId, goalId);
   }
 
-  createFact(userId: string, input: CreateFactInput, context: MutationContext): Fact {
+  async createFact(userId: string, input: CreateFactInput, context: MutationContext): Promise<Fact> {
     this.validateUserAndContext(userId, context);
-    this.validateFactInput(userId, input);
+    await this.validateFactInput(this.store, userId, input);
 
-    return this.mutate(userId, 'createFact', input, context, () => {
+    return this.mutate(userId, 'createFact', input, context, async (store) => {
       const now = this.now();
       const status: FactStatus =
         input.scope.use === 'prohibited'
@@ -225,8 +230,13 @@ export class ProfileService {
         ...(input.valid_until ? { valid_until: input.valid_until } : {}),
         ...(status === 'active' ? { confirmed_at: now } : {}),
       };
-      this.store.facts.set(fact.id, clone(fact));
-      this.recordVersion(this.store.factVersions, fact, now);
+      await store.saveFact(userId, fact);
+      await store.appendFactVersion(userId, {
+        resource_id: fact.id,
+        version: fact.version,
+        recorded_at: now,
+        snapshot: clone(fact),
+      });
       return {
         result: fact,
         audit: {
@@ -248,33 +258,21 @@ export class ProfileService {
     });
   }
 
-  getFact(userId: string, factId: string): Fact {
-    return clone(this.requireOwned(this.store.facts, userId, factId, 'fact'));
+  async getFact(userId: string, factId: string): Promise<Fact> {
+    return this.requireOwned(userId, factId, 'fact', () => this.store.getFact(userId, factId));
   }
 
-  listFacts(userId: string, filter: FactListFilter = {}): Fact[] {
-    this.validateUuid(userId, 'user_id');
-    return [...this.store.facts.values()]
-      .filter(
-        (fact) =>
-          fact.user_id === userId &&
-          (filter.include_deleted || fact.status !== 'deleted') &&
-          (!filter.status || fact.status === filter.status) &&
-          (!filter.kind || fact.kind === filter.kind),
-      )
-      .sort((left, right) =>
-        `${left.created_at}:${left.id}`.localeCompare(`${right.created_at}:${right.id}`),
-      )
-      .map(clone);
+  async listFacts(userId: string, filter: FactListFilter = {}): Promise<Fact[]> {
+    return this.listFactsFrom(this.store, userId, filter);
   }
 
-  updateFact(
+  async updateFact(
     userId: string,
     factId: string,
     expectedVersion: number,
     input: UpdateFactInput,
     context: MutationContext,
-  ): Fact {
+  ): Promise<Fact> {
     this.validateUserAndContext(userId, context);
     this.validateNonEmptyUpdate(input);
     this.rejectUnknownKeys(
@@ -283,8 +281,8 @@ export class ProfileService {
       'fact update',
     );
 
-    return this.mutate(userId, 'updateFact', { factId, expectedVersion, input }, context, () => {
-      const current = this.requireOwned(this.store.facts, userId, factId, 'fact');
+    return this.mutate(userId, 'updateFact', { factId, expectedVersion, input }, context, async (store) => {
+      const current = await this.requireOwned(userId, factId, 'fact', () => store.getFact(userId, factId));
       this.assertVersion(current.version, expectedVersion);
       if (
         current.status === 'deleted' ||
@@ -295,7 +293,7 @@ export class ProfileService {
         throw this.invalidTransition(current.status, 'pending_confirmation');
       }
       const merged = { ...clone(current), ...clone(input) };
-      this.validateFactInput(userId, {
+      await this.validateFactInput(store, userId, {
         kind: merged.kind,
         value: merged.value,
         scope: merged.scope,
@@ -316,8 +314,13 @@ export class ProfileService {
         updated_at: now,
       };
       delete updated.confirmed_at;
-      this.store.facts.set(factId, clone(updated));
-      this.recordVersion(this.store.factVersions, updated, now);
+      await store.saveFact(userId, updated);
+      await store.appendFactVersion(userId, {
+        resource_id: updated.id,
+        version: updated.version,
+        recorded_at: now,
+        snapshot: clone(updated),
+      });
       return {
         result: updated,
         audit: {
@@ -332,12 +335,12 @@ export class ProfileService {
     });
   }
 
-  confirmFact(
+  async confirmFact(
     userId: string,
     factId: string,
     expectedVersion: number,
     context: MutationContext,
-  ): Fact {
+  ): Promise<Fact> {
     return this.transitionFact(
       userId,
       factId,
@@ -350,12 +353,12 @@ export class ProfileService {
     );
   }
 
-  rejectFact(
+  async rejectFact(
     userId: string,
     factId: string,
     expectedVersion: number,
     context: MutationContext,
-  ): Fact {
+  ): Promise<Fact> {
     return this.transitionFact(
       userId,
       factId,
@@ -367,12 +370,12 @@ export class ProfileService {
     );
   }
 
-  expireFact(
+  async expireFact(
     userId: string,
     factId: string,
     expectedVersion: number,
     context: MutationContext,
-  ): Fact {
+  ): Promise<Fact> {
     return this.transitionFact(
       userId,
       factId,
@@ -384,12 +387,12 @@ export class ProfileService {
     );
   }
 
-  revokeFact(
+  async revokeFact(
     userId: string,
     factId: string,
     expectedVersion: number,
     context: MutationContext,
-  ): Fact {
+  ): Promise<Fact> {
     return this.transitionFact(
       userId,
       factId,
@@ -401,15 +404,15 @@ export class ProfileService {
     );
   }
 
-  deleteFact(
+  async deleteFact(
     userId: string,
     factId: string,
     expectedVersion: number,
     context: MutationContext,
-  ): Fact {
+  ): Promise<Fact> {
     this.validateUserAndContext(userId, context);
-    return this.mutate(userId, 'deleteFact', { factId, expectedVersion }, context, () => {
-      const current = this.requireOwned(this.store.facts, userId, factId, 'fact');
+    return this.mutate(userId, 'deleteFact', { factId, expectedVersion }, context, async (store) => {
+      const current = await this.requireOwned(userId, factId, 'fact', () => store.getFact(userId, factId));
       this.assertVersion(current.version, expectedVersion);
       if (current.status === 'deleted') {
         throw this.invalidTransition('deleted', 'deleted');
@@ -427,8 +430,8 @@ export class ProfileService {
         created_at: current.created_at,
         updated_at: now,
       };
-      this.store.facts.set(factId, clone(deleted));
-      this.store.factVersions.set(factId, [
+      await store.saveFact(userId, deleted);
+      await store.replaceFactVersions(userId, [
         {
           resource_id: factId,
           version: deleted.version,
@@ -436,7 +439,7 @@ export class ProfileService {
           snapshot: clone(deleted),
         },
       ]);
-      this.purgeIdempotencyForResource(userId, factId);
+      await store.deleteIdempotencyForResource(userId, factId);
       return {
         result: deleted,
         audit: {
@@ -459,56 +462,36 @@ export class ProfileService {
     });
   }
 
-  getFactVersions(userId: string, factId: string): VersionRecord<Fact>[] {
-    this.requireOwned(this.store.facts, userId, factId, 'fact');
-    return clone(this.store.factVersions.get(factId) ?? []);
+  async getFactVersions(userId: string, factId: string): Promise<VersionRecord<Fact>[]> {
+    await this.requireOwned(userId, factId, 'fact', () => this.store.getFact(userId, factId));
+    return this.store.listFactVersions(userId, factId);
   }
 
-  isFactUsable(userId: string, factId: string, goalId?: string): boolean {
-    const fact = this.requireOwned(this.store.facts, userId, factId, 'fact');
-    if (fact.status !== 'active' || !fact.confirmed_at) {
-      return false;
-    }
-    const now = Date.now();
-    if (
-      (fact.valid_from && Date.parse(fact.valid_from) > now) ||
-      (fact.valid_until && Date.parse(fact.valid_until) <= now)
-    ) {
-      return false;
-    }
-    if (fact.scope.use === 'manual_only' || fact.scope.use === 'prohibited') {
-      return false;
-    }
-    if (goalId) {
-      const goal = this.store.goals.get(goalId);
-      if (!goal || goal.user_id !== userId || goal.status === 'archived') {
-        return false;
-      }
-    }
-    if (fact.scope.use === 'all_goals') {
-      return true;
-    }
-    return Boolean(goalId && fact.scope.goal_ids?.includes(goalId));
+  async isFactUsable(userId: string, factId: string, goalId?: string): Promise<boolean> {
+    const fact = await this.requireOwned(userId, factId, 'fact', () => this.store.getFact(userId, factId));
+    const resolvedGoal = await this.resolveUsableGoal(userId, goalId);
+    return this.evaluateFactUsable(fact, resolvedGoal, goalId);
   }
 
-  listUsableFacts(userId: string, goalId?: string): Fact[] {
-    return this.listFacts(userId).filter((fact) => this.isFactUsable(userId, fact.id, goalId));
+  async listUsableFacts(userId: string, goalId?: string): Promise<Fact[]> {
+    const facts = await this.listFacts(userId);
+    const resolvedGoal = await this.resolveUsableGoal(userId, goalId);
+    return facts.filter((fact) => this.evaluateFactUsable(fact, resolvedGoal, goalId));
   }
 
-  getUsableWorkAuthorizationFacts(userId: string, goalId: string): Fact[] {
-    return this.listUsableFacts(userId, goalId).filter(
-      (fact) => fact.kind === 'work_authorization',
-    );
+  async getUsableWorkAuthorizationFacts(userId: string, goalId: string): Promise<Fact[]> {
+    const facts = await this.listUsableFacts(userId, goalId);
+    return facts.filter((fact) => fact.kind === 'work_authorization');
   }
 
-  createFileMetadata(
+  async createFileMetadata(
     userId: string,
     input: CreateFileMetadataInput,
     context: MutationContext,
-  ): FileMetadata {
+  ): Promise<FileMetadata> {
     this.validateUserAndContext(userId, context);
     this.validateFileInput(input);
-    return this.mutate(userId, 'createFileMetadata', input, context, () => {
+    return this.mutate(userId, 'createFileMetadata', input, context, async (store) => {
       const now = this.now();
       const file: FileMetadata = {
         ...clone(input),
@@ -518,8 +501,13 @@ export class ProfileService {
         version: 1,
         created_at: now,
       };
-      this.store.files.set(file.id, clone(file));
-      this.recordVersion(this.store.fileVersions, file, now);
+      await store.saveFile(userId, file);
+      await store.appendFileVersion(userId, {
+        resource_id: file.id,
+        version: file.version,
+        recorded_at: now,
+        snapshot: clone(file),
+      });
       return {
         result: file,
         audit: {
@@ -540,27 +528,21 @@ export class ProfileService {
     });
   }
 
-  getFileMetadata(userId: string, fileId: string): FileMetadata {
-    return clone(this.requireOwned(this.store.files, userId, fileId, 'file'));
+  async getFileMetadata(userId: string, fileId: string): Promise<FileMetadata> {
+    return this.requireOwned(userId, fileId, 'file', () => this.store.getFile(userId, fileId));
   }
 
-  listFileMetadata(userId: string): FileMetadata[] {
-    this.validateUuid(userId, 'user_id');
-    return [...this.store.files.values()]
-      .filter((file) => file.user_id === userId)
-      .sort((left, right) =>
-        `${left.created_at}:${left.id}`.localeCompare(`${right.created_at}:${right.id}`),
-      )
-      .map(clone);
+  async listFileMetadata(userId: string): Promise<FileMetadata[]> {
+    return this.listFileMetadataFrom(this.store, userId);
   }
 
-  updateFileScanStatus(
+  async updateFileScanStatus(
     userId: string,
     fileId: string,
     expectedVersion: number,
     scanStatus: FileScanStatus,
     context: MutationContext,
-  ): FileMetadata {
+  ): Promise<FileMetadata> {
     this.validateUserAndContext(userId, context);
     if (!['pending', 'clean', 'quarantined', 'infected', 'failed'].includes(scanStatus)) {
       throw this.validation('scan_status is invalid.');
@@ -570,16 +552,22 @@ export class ProfileService {
       'updateFileScanStatus',
       { fileId, expectedVersion, scanStatus },
       context,
-      () => {
-        const current = this.requireOwned(this.store.files, userId, fileId, 'file');
+      async (store) => {
+        const current = await this.requireOwned(userId, fileId, 'file', () => store.getFile(userId, fileId));
         this.assertVersion(current.version, expectedVersion);
+        const now = this.now();
         const updated = {
           ...clone(current),
           scan_status: scanStatus,
           version: current.version + 1,
         };
-        this.store.files.set(fileId, clone(updated));
-        this.recordVersion(this.store.fileVersions, updated, this.now());
+        await store.saveFile(userId, updated);
+        await store.appendFileVersion(userId, {
+          resource_id: updated.id,
+          version: updated.version,
+          recorded_at: now,
+          snapshot: clone(updated),
+        });
         return {
           result: updated,
           audit: {
@@ -595,32 +583,33 @@ export class ProfileService {
     );
   }
 
-  listUsableResumeFiles(userId: string): FileMetadata[] {
-    return this.listFileMetadata(userId).filter(
+  async listUsableResumeFiles(userId: string): Promise<FileMetadata[]> {
+    const files = await this.listFileMetadata(userId);
+    return files.filter(
       (file) =>
         (file.purpose === 'resume_source' || file.purpose === 'resume_output') &&
         file.scan_status === 'clean',
     );
   }
 
-  getFileVersions(userId: string, fileId: string): VersionRecord<FileMetadata>[] {
-    this.requireOwned(this.store.files, userId, fileId, 'file');
-    return clone(this.store.fileVersions.get(fileId) ?? []);
+  async getFileVersions(userId: string, fileId: string): Promise<VersionRecord<FileMetadata>[]> {
+    await this.requireOwned(userId, fileId, 'file', () => this.store.getFile(userId, fileId));
+    return this.store.listFileVersions(userId, fileId);
   }
 
-  deleteFileMetadata(
+  async deleteFileMetadata(
     userId: string,
     fileId: string,
     expectedVersion: number,
     context: MutationContext,
-  ): void {
+  ): Promise<void> {
     this.validateUserAndContext(userId, context);
-    this.mutate(userId, 'deleteFileMetadata', { fileId, expectedVersion }, context, () => {
-      const current = this.requireOwned(this.store.files, userId, fileId, 'file');
+    await this.mutate(userId, 'deleteFileMetadata', { fileId, expectedVersion }, context, async (store) => {
+      const current = await this.requireOwned(userId, fileId, 'file', () => store.getFile(userId, fileId));
       this.assertVersion(current.version, expectedVersion);
-      this.store.files.delete(fileId);
-      this.store.fileVersions.delete(fileId);
-      this.purgeIdempotencyForResource(userId, fileId);
+      await store.deleteFile(userId, fileId);
+      await store.deleteFileVersions(userId, fileId);
+      await store.deleteIdempotencyForResource(userId, fileId);
       return {
         result: undefined,
         audit: {
@@ -635,22 +624,21 @@ export class ProfileService {
     });
   }
 
-  listAuditEvents(userId: string): AuditEvent[] {
-    this.validateUuid(userId, 'user_id');
-    return this.store.auditEvents.filter((event) => event.tenant_id === userId).map(clone);
+  async listAuditEvents(userId: string): Promise<AuditEvent[]> {
+    return this.listAuditEventsFrom(this.store, userId);
   }
 
-  exportProfile(userId: string, context: MutationContext): ProfileExport {
+  async exportProfile(userId: string, context: MutationContext): Promise<ProfileExport> {
     this.validateUserAndContext(userId, context);
-    return this.mutate(userId, 'exportProfile', { userId }, context, () => ({
+    return this.mutate(userId, 'exportProfile', { userId }, context, async (store) => ({
       result: {
         schema_version: '1.0.0',
         exported_at: this.now(),
         user_id: userId,
-        goals: this.listGoals(userId, true),
-        facts: this.listFacts(userId, { include_deleted: true }),
-        files: this.listFileMetadata(userId),
-        audit: this.listAuditEvents(userId),
+        goals: await this.listGoalsFrom(store, userId, true),
+        facts: await this.listFactsFrom(store, userId, { include_deleted: true }),
+        files: await this.listFileMetadataFrom(store, userId),
+        audit: await this.listAuditEventsFrom(store, userId),
       },
       audit: {
         resourceType: 'user',
@@ -661,34 +649,16 @@ export class ProfileService {
     }));
   }
 
-  deleteUserProfile(
+  async deleteUserProfile(
     userId: string,
     context: MutationContext,
-  ): { goals: number; facts: number; files: number } {
+  ): Promise<{ goals: number; facts: number; files: number }> {
     this.validateUserAndContext(userId, context);
-    return this.mutate(userId, 'deleteUserProfile', { userId }, context, () => {
-      const goalIds = this.ownedIds(this.store.goals, userId);
-      const factIds = this.ownedIds(this.store.facts, userId);
-      const fileIds = this.ownedIds(this.store.files, userId);
-      goalIds.forEach((id) => {
-        this.store.goals.delete(id);
-        this.store.goalVersions.delete(id);
-      });
-      factIds.forEach((id) => {
-        this.store.facts.delete(id);
-        this.store.factVersions.delete(id);
-      });
-      fileIds.forEach((id) => {
-        this.store.files.delete(id);
-        this.store.fileVersions.delete(id);
-      });
-      this.purgeIdempotencyForUser(userId);
+    return this.mutate(userId, 'deleteUserProfile', { userId }, context, async (store) => {
+      const counts = await store.deleteUserData(userId);
+      await store.deleteIdempotencyForUser(userId);
       return {
-        result: {
-          goals: goalIds.length,
-          facts: factIds.length,
-          files: fileIds.length,
-        },
+        result: counts,
         audit: {
           resourceType: 'user',
           resourceId: userId,
@@ -700,7 +670,7 @@ export class ProfileService {
     });
   }
 
-  private transitionFact(
+  private async transitionFact(
     userId: string,
     factId: string,
     expectedVersion: number,
@@ -709,10 +679,10 @@ export class ProfileService {
     action: string,
     context: MutationContext,
     confirm = false,
-  ): Fact {
+  ): Promise<Fact> {
     this.validateUserAndContext(userId, context);
-    return this.mutate(userId, action, { factId, expectedVersion, target }, context, () => {
-      const current = this.requireOwned(this.store.facts, userId, factId, 'fact');
+    return this.mutate(userId, action, { factId, expectedVersion, target }, context, async (store) => {
+      const current = await this.requireOwned(userId, factId, 'fact', () => store.getFact(userId, factId));
       this.assertVersion(current.version, expectedVersion);
       if (!allowedFrom.includes(current.status)) {
         throw this.invalidTransition(current.status, target);
@@ -728,8 +698,13 @@ export class ProfileService {
         updated_at: now,
         ...(confirm ? { confirmed_at: now } : {}),
       };
-      this.store.facts.set(factId, clone(updated));
-      this.recordVersion(this.store.factVersions, updated, now);
+      await store.saveFact(userId, updated);
+      await store.appendFactVersion(userId, {
+        resource_id: updated.id,
+        version: updated.version,
+        recorded_at: now,
+        snapshot: clone(updated),
+      });
       return {
         result: updated,
         audit: {
@@ -744,39 +719,71 @@ export class ProfileService {
     });
   }
 
-  private mutate<T>(
+  private async resolveUsableGoal(userId: string, goalId?: string): Promise<Goal | undefined> {
+    if (!goalId) return undefined;
+    const goal = await this.store.getGoal(userId, goalId);
+    return goal && goal.status !== 'archived' ? goal : undefined;
+  }
+
+  private evaluateFactUsable(fact: Fact, resolvedGoal: Goal | undefined, goalId?: string): boolean {
+    if (fact.status !== 'active' || !fact.confirmed_at) {
+      return false;
+    }
+    const now = Date.now();
+    if (
+      (fact.valid_from && Date.parse(fact.valid_from) > now) ||
+      (fact.valid_until && Date.parse(fact.valid_until) <= now)
+    ) {
+      return false;
+    }
+    if (fact.scope.use === 'manual_only' || fact.scope.use === 'prohibited') {
+      return false;
+    }
+    if (goalId && !resolvedGoal) {
+      return false;
+    }
+    if (fact.scope.use === 'all_goals') {
+      return true;
+    }
+    return Boolean(goalId && fact.scope.goal_ids?.includes(goalId));
+  }
+
+  private async mutate<T>(
     userId: string,
     operation: string,
     request: unknown,
     context: MutationContext,
-    change: () => { result: T; audit: AuditChange },
-  ): T {
-    const key = `${userId}:${operation}:${context.idempotency_key}`;
+    change: (store: ProfileStore) => Promise<{ result: T; audit: AuditChange }>,
+  ): Promise<T> {
     const hash = requestHash(request);
-    const prior = this.store.idempotency.get(key);
-    if (prior) {
-      if (prior.request_hash !== hash) {
-        throw new ProfileError(
-          'IDEMPOTENCY_KEY_REUSED',
-          'The idempotency key was already used for a different request.',
-          409,
-        );
+    return this.store.withTransaction(async (store) => {
+      const prior = await store.getIdempotency(userId, operation, context.idempotency_key);
+      if (prior) {
+        if (prior.request_hash !== hash) {
+          throw new ProfileError(
+            'IDEMPOTENCY_KEY_REUSED',
+            'The idempotency key was already used for a different request.',
+            409,
+          );
+        }
+        return clone(prior.response as T);
       }
-      return clone(prior.response as T);
-    }
 
-    const { result, audit } = change();
-    const event = this.appendAudit(userId, context, audit);
-    this.store.idempotency.set(key, {
-      request_hash: hash,
-      response: clone(result),
-      audit_event_id: event.event_id,
+      const { result, audit } = await change(store);
+      const event = this.buildAuditEvent(userId, context, audit);
+      await store.appendAuditEvent(userId, event);
+      await store.saveIdempotency(userId, operation, context.idempotency_key, {
+        request_hash: hash,
+        response: clone(result),
+        audit_event_id: event.event_id,
+        resource_id: audit.resourceId,
+      });
+      return clone(result);
     });
-    return clone(result);
   }
 
-  private appendAudit(userId: string, context: MutationContext, change: AuditChange): AuditEvent {
-    const event: AuditEvent = {
+  private buildAuditEvent(userId: string, context: MutationContext, change: AuditChange): AuditEvent {
+    return {
       event_id: randomUUID(),
       occurred_at: this.now(),
       actor: { type: 'user', id: context.actor_id },
@@ -791,127 +798,134 @@ export class ProfileService {
       ...(change.beforeStatus ? { from_status: change.beforeStatus } : {}),
       ...(change.afterStatus ? { to_status: change.afterStatus } : {}),
     };
-    this.store.auditEvents.push(clone(event));
-    return event;
   }
 
-  private recordVersion<T extends { id: string; version: number }>(
-    versions: Map<string, VersionRecord<T>[]>,
-    resource: T,
-    recordedAt: string,
-  ): void {
-    const history = versions.get(resource.id) ?? [];
-    history.push({
-      resource_id: resource.id,
-      version: resource.version,
-      recorded_at: recordedAt,
-      snapshot: clone(resource),
-    });
-    versions.set(resource.id, history);
-  }
-
-  private requireOwned<T extends { user_id: string }>(
-    records: Map<string, T>,
+  private async requireOwned<T>(
     userId: string,
     resourceId: string,
     resourceName: string,
-  ): T {
+    fetch: () => Promise<T | undefined>,
+  ): Promise<T> {
     this.validateUuid(userId, 'user_id');
     this.validateUuid(resourceId, `${resourceName}_id`);
-    const resource = records.get(resourceId);
-    if (!resource || resource.user_id !== userId) {
+    const resource = await fetch();
+    if (!resource) {
       throw new ProfileError('RESOURCE_NOT_FOUND', `${resourceName} was not found.`, 404);
     }
     return resource;
   }
 
-  private ownedIds<T extends { user_id: string }>(
-    records: Map<string, T>,
+  private async listGoalsFrom(store: ProfileStore, userId: string, includeArchived = false): Promise<Goal[]> {
+    this.validateUuid(userId, 'user_id');
+    return store.listGoals(userId, includeArchived);
+  }
+
+  private async listFactsFrom(
+    store: ProfileStore,
     userId: string,
-  ): string[] {
-    return [...records.entries()]
-      .filter(([, resource]) => resource.user_id === userId)
-      .map(([id]) => id);
-  }
-
-  private purgeIdempotencyForResource(userId: string, resourceId: string): void {
-    const prefix = `${userId}:`;
-    for (const [key, record] of this.store.idempotency) {
-      if (key.startsWith(prefix) && this.responseContainsResource(record.response, resourceId)) {
-        this.store.idempotency.delete(key);
-      }
-    }
-  }
-
-  private purgeIdempotencyForUser(userId: string): void {
-    const prefix = `${userId}:`;
-    for (const key of this.store.idempotency.keys()) {
-      if (key.startsWith(prefix)) {
-        this.store.idempotency.delete(key);
-      }
-    }
-  }
-
-  private responseContainsResource(response: unknown, resourceId: string): boolean {
-    if (Array.isArray(response)) {
-      return response.some((item) => this.responseContainsResource(item, resourceId));
-    }
-    if (!isRecord(response)) {
-      return false;
-    }
-    if (response.id === resourceId || response.resource_id === resourceId) {
-      return true;
-    }
-    return Object.values(response).some((value) =>
-      this.responseContainsResource(value, resourceId),
+    filter: FactListFilter = {},
+  ): Promise<Fact[]> {
+    this.validateUuid(userId, 'user_id');
+    const facts = await store.listFacts(userId, filter.include_deleted);
+    return facts.filter(
+      (fact) => (!filter.status || fact.status === filter.status) && (!filter.kind || fact.kind === filter.kind),
     );
   }
 
-  private assertVersion(actual: number, expected: number): void {
-    if (!Number.isInteger(expected) || expected < 1) {
-      throw new ProfileError(
-        'VALIDATION_FAILED',
-        'expected_version must be a positive integer.',
-        400,
-      );
-    }
-    if (actual !== expected) {
-      throw new ProfileError(
-        'CONFLICT',
-        'The resource version does not match expected_version.',
-        409,
-      );
-    }
+  private async listFileMetadataFrom(store: ProfileStore, userId: string): Promise<FileMetadata[]> {
+    this.validateUuid(userId, 'user_id');
+    return store.listFiles(userId);
   }
 
-  private validateUserAndContext(userId: string, context: MutationContext): void {
+  private async listAuditEventsFrom(store: ProfileStore, userId: string): Promise<AuditEvent[]> {
     this.validateUuid(userId, 'user_id');
-    if (!isRecord(context)) {
-      throw this.validation('Mutation context is required.');
+    return store.listAuditEvents(userId);
+  }
+
+  private async validateFactInput(
+    store: ProfileStore,
+    userId: string,
+    input: CreateFactInput,
+  ): Promise<void> {
+    if (!isRecord(input)) {
+      throw this.validation('fact must be an object.');
     }
-    if (context.actor_id !== userId) {
-      throw new ProfileError(
-        'VALIDATION_FAILED',
-        'actor_id must identify the authenticated user.',
-        400,
-      );
+    const allowedKinds = new Set([
+      'identity',
+      'contact',
+      'summary',
+      'experience',
+      'education',
+      'skill',
+      'certification',
+      'project',
+      'work_authorization',
+      'preference',
+    ]);
+    if (!allowedKinds.has(input.kind)) {
+      throw this.validation('fact kind is invalid.');
+    }
+    if (input.user_confirmed !== undefined && typeof input.user_confirmed !== 'boolean') {
+      throw this.validation('user_confirmed must be a boolean.');
+    }
+    this.rejectUnknownKeys(
+      input,
+      new Set(['kind', 'value', 'scope', 'source', 'valid_from', 'valid_until', 'user_confirmed']),
+      'fact',
+    );
+    if (
+      !isRecord(input.value) ||
+      Object.keys(input.value).length < 1 ||
+      Object.keys(input.value).length > 50 ||
+      Object.values(input.value).some(
+        (value) =>
+          !(
+            value === null ||
+            typeof value === 'boolean' ||
+            (typeof value === 'number' && Number.isFinite(value)) ||
+            (typeof value === 'string' && value.length <= 10_000)
+          ),
+      )
+    ) {
+      throw this.validation('fact value is invalid.');
+    }
+    if (!isRecord(input.scope)) {
+      throw this.validation('fact scope is invalid.');
+    }
+    this.rejectUnknownKeys(input.scope, new Set(['use', 'goal_ids']), 'fact scope');
+    const scopeUses = new Set(['all_goals', 'selected_goals', 'manual_only', 'prohibited']);
+    if (!scopeUses.has(input.scope.use)) {
+      throw this.validation('fact scope use is invalid.');
+    }
+    const goalIds = input.scope.goal_ids ?? [];
+    if (
+      !Array.isArray(goalIds) ||
+      goalIds.length > 100 ||
+      new Set(goalIds).size !== goalIds.length ||
+      goalIds.some((id) => typeof id !== 'string' || !UUID_PATTERN.test(id))
+    ) {
+      throw this.validation('scope goal_ids is invalid.');
+    }
+    if (input.scope.use === 'selected_goals' && goalIds.length === 0) {
+      throw this.validation('selected_goals requires goal_ids.');
+    }
+    if (input.scope.use !== 'selected_goals' && goalIds.length > 0) {
+      throw this.validation('goal_ids is only allowed for selected_goals.');
+    }
+    for (const goalId of goalIds) {
+      await this.requireOwned(userId, goalId, 'goal', () => store.getGoal(userId, goalId));
     }
     if (
-      typeof context.request_id !== 'string' ||
-      !UUID_PATTERN.test(context.request_id) ||
-      typeof context.correlation_id !== 'string' ||
-      !UUID_PATTERN.test(context.correlation_id) ||
-      (context.causation_id !== undefined &&
-        (typeof context.causation_id !== 'string' || !UUID_PATTERN.test(context.causation_id))) ||
-      typeof context.idempotency_key !== 'string' ||
-      !IDEMPOTENCY_KEY_PATTERN.test(context.idempotency_key)
+      !isRecord(input.source) ||
+      !['user', 'file', 'system_rule'].includes(input.source.type) ||
+      typeof input.source.reference !== 'string' ||
+      input.source.reference.length < 1 ||
+      input.source.reference.length > 512
     ) {
-      throw new ProfileError(
-        'VALIDATION_FAILED',
-        'Mutation context UUIDs and a 16-128 character idempotency key are required.',
-        400,
-      );
+      throw this.validation('fact source is invalid.');
     }
+    this.rejectUnknownKeys(input.source, new Set(['type', 'reference']), 'fact source');
+    this.validateDateRange(input.valid_from, input.valid_until);
   }
 
   private validateGoalInput(input: CreateGoalInput): void {
@@ -1018,86 +1032,6 @@ export class ProfileService {
     this.rejectUnknownKeys(salary, new Set(['minimum', 'maximum', 'currency', 'period']), 'salary');
   }
 
-  private validateFactInput(userId: string, input: CreateFactInput): void {
-    if (!isRecord(input)) {
-      throw this.validation('fact must be an object.');
-    }
-    const allowedKinds = new Set([
-      'identity',
-      'contact',
-      'summary',
-      'experience',
-      'education',
-      'skill',
-      'certification',
-      'project',
-      'work_authorization',
-      'preference',
-    ]);
-    if (!allowedKinds.has(input.kind)) {
-      throw this.validation('fact kind is invalid.');
-    }
-    if (input.user_confirmed !== undefined && typeof input.user_confirmed !== 'boolean') {
-      throw this.validation('user_confirmed must be a boolean.');
-    }
-    this.rejectUnknownKeys(
-      input,
-      new Set(['kind', 'value', 'scope', 'source', 'valid_from', 'valid_until', 'user_confirmed']),
-      'fact',
-    );
-    if (
-      !isRecord(input.value) ||
-      Object.keys(input.value).length < 1 ||
-      Object.keys(input.value).length > 50 ||
-      Object.values(input.value).some(
-        (value) =>
-          !(
-            value === null ||
-            typeof value === 'boolean' ||
-            (typeof value === 'number' && Number.isFinite(value)) ||
-            (typeof value === 'string' && value.length <= 10_000)
-          ),
-      )
-    ) {
-      throw this.validation('fact value is invalid.');
-    }
-    if (!isRecord(input.scope)) {
-      throw this.validation('fact scope is invalid.');
-    }
-    this.rejectUnknownKeys(input.scope, new Set(['use', 'goal_ids']), 'fact scope');
-    const scopeUses = new Set(['all_goals', 'selected_goals', 'manual_only', 'prohibited']);
-    if (!scopeUses.has(input.scope.use)) {
-      throw this.validation('fact scope use is invalid.');
-    }
-    const goalIds = input.scope.goal_ids ?? [];
-    if (
-      !Array.isArray(goalIds) ||
-      goalIds.length > 100 ||
-      new Set(goalIds).size !== goalIds.length ||
-      goalIds.some((id) => typeof id !== 'string' || !UUID_PATTERN.test(id))
-    ) {
-      throw this.validation('scope goal_ids is invalid.');
-    }
-    if (input.scope.use === 'selected_goals' && goalIds.length === 0) {
-      throw this.validation('selected_goals requires goal_ids.');
-    }
-    if (input.scope.use !== 'selected_goals' && goalIds.length > 0) {
-      throw this.validation('goal_ids is only allowed for selected_goals.');
-    }
-    goalIds.forEach((goalId) => this.requireOwned(this.store.goals, userId, goalId, 'goal'));
-    if (
-      !isRecord(input.source) ||
-      !['user', 'file', 'system_rule'].includes(input.source.type) ||
-      typeof input.source.reference !== 'string' ||
-      input.source.reference.length < 1 ||
-      input.source.reference.length > 512
-    ) {
-      throw this.validation('fact source is invalid.');
-    }
-    this.rejectUnknownKeys(input.source, new Set(['type', 'reference']), 'fact source');
-    this.validateDateRange(input.valid_from, input.valid_until);
-  }
-
   private validateFileInput(input: CreateFileMetadataInput): void {
     if (!isRecord(input)) {
       throw this.validation('file metadata must be an object.');
@@ -1196,6 +1130,53 @@ export class ProfileService {
 
   private validation(message: string): ProfileError {
     return new ProfileError('VALIDATION_FAILED', message, 400);
+  }
+
+  private assertVersion(actual: number, expected: number): void {
+    if (!Number.isInteger(expected) || expected < 1) {
+      throw new ProfileError(
+        'VALIDATION_FAILED',
+        'expected_version must be a positive integer.',
+        400,
+      );
+    }
+    if (actual !== expected) {
+      throw new ProfileError(
+        'CONFLICT',
+        'The resource version does not match expected_version.',
+        409,
+      );
+    }
+  }
+
+  private validateUserAndContext(userId: string, context: MutationContext): void {
+    this.validateUuid(userId, 'user_id');
+    if (!isRecord(context)) {
+      throw this.validation('Mutation context is required.');
+    }
+    if (context.actor_id !== userId) {
+      throw new ProfileError(
+        'VALIDATION_FAILED',
+        'actor_id must identify the authenticated user.',
+        400,
+      );
+    }
+    if (
+      typeof context.request_id !== 'string' ||
+      !UUID_PATTERN.test(context.request_id) ||
+      typeof context.correlation_id !== 'string' ||
+      !UUID_PATTERN.test(context.correlation_id) ||
+      (context.causation_id !== undefined &&
+        (typeof context.causation_id !== 'string' || !UUID_PATTERN.test(context.causation_id))) ||
+      typeof context.idempotency_key !== 'string' ||
+      !IDEMPOTENCY_KEY_PATTERN.test(context.idempotency_key)
+    ) {
+      throw new ProfileError(
+        'VALIDATION_FAILED',
+        'Mutation context UUIDs and a 16-128 character idempotency key are required.',
+        400,
+      );
+    }
   }
 
   private now(): string {

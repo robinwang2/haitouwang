@@ -1,4 +1,4 @@
-import { deepEqual, equal, match, notEqual, throws } from 'node:assert/strict';
+import { deepEqual, equal, match, notEqual, rejects } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { describe, it } from 'vitest';
 
@@ -44,28 +44,25 @@ function createGoal(
 }
 
 describe('ProfileService goals', () => {
-  it('supports isolated multi-goal CRUD, optimistic versions and audit', () => {
+  it('supports isolated multi-goal CRUD, optimistic versions and audit', async () => {
     const { userId, otherUserId, service, context } = fixture();
-    const first = createGoal(service, userId, context, 'Backend');
-    const second = createGoal(service, userId, context, 'Platform');
-    createGoal(service, otherUserId, () => context(otherUserId), 'Other tenant');
+    const first = await createGoal(service, userId, context, 'Backend');
+    const second = await createGoal(service, userId, context, 'Platform');
+    await createGoal(service, otherUserId, () => context(otherUserId), 'Other tenant');
 
     deepEqual(
-      service
-        .listGoals(userId)
-        .map((goal) => goal.name)
-        .sort(),
+      (await service.listGoals(userId)).map((goal) => goal.name).sort(),
       ['Backend', 'Platform'],
     );
-    throws(
-      () => service.getGoal(otherUserId, first.id),
+    await rejects(
+      service.getGoal(otherUserId, first.id),
       (error: unknown) =>
         error instanceof ProfileError &&
         error.code === 'RESOURCE_NOT_FOUND' &&
         error.status === 404,
     );
 
-    const updated = service.updateGoal(
+    const updated = await service.updateGoal(
       userId,
       first.id,
       1,
@@ -73,19 +70,19 @@ describe('ProfileService goals', () => {
       context(),
     );
     equal(updated.version, 2);
-    equal(service.getGoalVersions(userId, first.id).length, 2);
-    throws(
-      () => service.updateGoal(userId, first.id, 1, { status: 'active' }, context()),
+    equal((await service.getGoalVersions(userId, first.id)).length, 2);
+    await rejects(
+      service.updateGoal(userId, first.id, 1, { status: 'active' }, context()),
       (error: unknown) => error instanceof ProfileError && error.code === 'CONFLICT',
     );
 
-    service.deleteGoal(userId, second.id, 1, context());
-    equal(service.listGoals(userId, true).length, 1);
-    const actions = service.listAuditEvents(userId).map((event) => event.action);
+    await service.deleteGoal(userId, second.id, 1, context());
+    equal((await service.listGoals(userId, true)).length, 1);
+    const actions = (await service.listAuditEvents(userId)).map((event) => event.action);
     deepEqual(actions, ['goal.created', 'goal.created', 'goal.updated', 'goal.deleted']);
-    const updateAudit = service
-      .listAuditEvents(userId)
-      .find((event) => event.action === 'goal.updated');
+    const updateAudit = (await service.listAuditEvents(userId)).find(
+      (event) => event.action === 'goal.updated',
+    );
     equal(updateAudit?.from_status, 'active');
     equal(updateAudit?.to_status, 'paused');
     equal('before_status' in (updateAudit ?? {}), false);
@@ -94,11 +91,11 @@ describe('ProfileService goals', () => {
 });
 
 describe('ProfileService facts', () => {
-  it('versions confirmation, changes and revocation without exposing values in audit', () => {
+  it('versions confirmation, changes and revocation without exposing values in audit', async () => {
     const { userId, service, context } = fixture();
-    const goal = createGoal(service, userId, context);
+    const goal = await createGoal(service, userId, context);
     const secretValue = 'sensitive-private-employer';
-    const pending = service.createFact(
+    const pending = await service.createFact(
       userId,
       {
         kind: 'experience',
@@ -110,12 +107,12 @@ describe('ProfileService facts', () => {
     );
 
     equal(pending.status, 'pending_confirmation');
-    equal(service.isFactUsable(userId, pending.id, goal.id), false);
-    const confirmed = service.confirmFact(userId, pending.id, pending.version, context());
+    equal(await service.isFactUsable(userId, pending.id, goal.id), false);
+    const confirmed = await service.confirmFact(userId, pending.id, pending.version, context());
     equal(confirmed.status, 'active');
-    equal(service.isFactUsable(userId, pending.id, goal.id), true);
+    equal(await service.isFactUsable(userId, pending.id, goal.id), true);
 
-    const changed = service.updateFact(
+    const changed = await service.updateFact(
       userId,
       pending.id,
       confirmed.version,
@@ -124,29 +121,29 @@ describe('ProfileService facts', () => {
     );
     equal(changed.status, 'pending_confirmation');
     equal(changed.confirmed_at, undefined);
-    equal(service.isFactUsable(userId, pending.id, goal.id), false);
-    const reconfirmed = service.confirmFact(userId, pending.id, changed.version, context());
-    const revoked = service.revokeFact(userId, pending.id, reconfirmed.version, context());
+    equal(await service.isFactUsable(userId, pending.id, goal.id), false);
+    const reconfirmed = await service.confirmFact(userId, pending.id, changed.version, context());
+    const revoked = await service.revokeFact(userId, pending.id, reconfirmed.version, context());
     equal(revoked.status, 'revoked');
-    equal(service.isFactUsable(userId, pending.id, goal.id), false);
+    equal(await service.isFactUsable(userId, pending.id, goal.id), false);
     deepEqual(
-      service.getFactVersions(userId, pending.id).map((version) => version.version),
+      (await service.getFactVersions(userId, pending.id)).map((version) => version.version),
       [1, 2, 3, 4, 5],
     );
-    equal(JSON.stringify(service.listAuditEvents(userId)).includes(secretValue), false);
+    equal(JSON.stringify(await service.listAuditEvents(userId)).includes(secretValue), false);
   });
 
-  it('never returns pending, expired, prohibited, manual-only or out-of-scope facts as usable', () => {
+  it('never returns pending, expired, prohibited, manual-only or out-of-scope facts as usable', async () => {
     const { userId, service, context } = fixture();
-    const selectedGoal = createGoal(service, userId, context, 'Selected');
-    const otherGoal = createGoal(service, userId, context, 'Other');
+    const selectedGoal = await createGoal(service, userId, context, 'Selected');
+    const otherGoal = await createGoal(service, userId, context, 'Other');
     const base = {
       kind: 'skill' as const,
       value: { name: 'TypeScript' },
       source: { type: 'user' as const, reference: 'profile-form' },
     };
-    const pending = service.createFact(userId, { ...base, scope: { use: 'all_goals' } }, context());
-    const timeRestricted = service.createFact(
+    const pending = await service.createFact(userId, { ...base, scope: { use: 'all_goals' } }, context());
+    const timeRestricted = await service.createFact(
       userId,
       {
         ...base,
@@ -156,7 +153,7 @@ describe('ProfileService facts', () => {
       },
       context(),
     );
-    const prohibited = service.createFact(
+    const prohibited = await service.createFact(
       userId,
       {
         ...base,
@@ -165,7 +162,7 @@ describe('ProfileService facts', () => {
       },
       context(),
     );
-    const manual = service.createFact(
+    const manual = await service.createFact(
       userId,
       {
         ...base,
@@ -174,7 +171,7 @@ describe('ProfileService facts', () => {
       },
       context(),
     );
-    const selected = service.createFact(
+    const selected = await service.createFact(
       userId,
       {
         ...base,
@@ -183,7 +180,7 @@ describe('ProfileService facts', () => {
       },
       context(),
     );
-    const explicitlyExpiredSource = service.createFact(
+    const explicitlyExpiredSource = await service.createFact(
       userId,
       {
         ...base,
@@ -192,42 +189,42 @@ describe('ProfileService facts', () => {
       },
       context(),
     );
-    const explicitlyExpired = service.expireFact(
+    const explicitlyExpired = await service.expireFact(
       userId,
       explicitlyExpiredSource.id,
       explicitlyExpiredSource.version,
       context(),
     );
-    const rejectedSource = service.createFact(
+    const rejectedSource = await service.createFact(
       userId,
       { ...base, scope: { use: 'all_goals' } },
       context(),
     );
-    const rejected = service.rejectFact(
+    const rejected = await service.rejectFact(
       userId,
       rejectedSource.id,
       rejectedSource.version,
       context(),
     );
 
-    equal(service.isFactUsable(userId, pending.id, selectedGoal.id), false);
-    equal(service.isFactUsable(userId, timeRestricted.id, selectedGoal.id), false);
-    equal(service.isFactUsable(userId, prohibited.id, selectedGoal.id), false);
-    equal(service.isFactUsable(userId, manual.id, selectedGoal.id), false);
-    equal(service.isFactUsable(userId, explicitlyExpired.id, selectedGoal.id), false);
-    equal(service.isFactUsable(userId, rejected.id, selectedGoal.id), false);
-    equal(service.isFactUsable(userId, selected.id, selectedGoal.id), true);
-    equal(service.isFactUsable(userId, selected.id, otherGoal.id), false);
+    equal(await service.isFactUsable(userId, pending.id, selectedGoal.id), false);
+    equal(await service.isFactUsable(userId, timeRestricted.id, selectedGoal.id), false);
+    equal(await service.isFactUsable(userId, prohibited.id, selectedGoal.id), false);
+    equal(await service.isFactUsable(userId, manual.id, selectedGoal.id), false);
+    equal(await service.isFactUsable(userId, explicitlyExpired.id, selectedGoal.id), false);
+    equal(await service.isFactUsable(userId, rejected.id, selectedGoal.id), false);
+    equal(await service.isFactUsable(userId, selected.id, selectedGoal.id), true);
+    equal(await service.isFactUsable(userId, selected.id, otherGoal.id), false);
     deepEqual(
-      service.listUsableFacts(userId, selectedGoal.id).map((fact) => fact.id),
+      (await service.listUsableFacts(userId, selectedGoal.id)).map((fact) => fact.id),
       [selected.id],
     );
   });
 
-  it('only supplies confirmed, in-scope work authorization facts', () => {
+  it('only supplies confirmed, in-scope work authorization facts', async () => {
     const { userId, service, context } = fixture();
-    const goal = createGoal(service, userId, context);
-    service.createFact(
+    const goal = await createGoal(service, userId, context);
+    await service.createFact(
       userId,
       {
         kind: 'work_authorization',
@@ -237,7 +234,7 @@ describe('ProfileService facts', () => {
       },
       context(),
     );
-    const available = service.createFact(
+    const available = await service.createFact(
       userId,
       {
         kind: 'work_authorization',
@@ -250,14 +247,14 @@ describe('ProfileService facts', () => {
     );
 
     deepEqual(
-      service.getUsableWorkAuthorizationFacts(userId, goal.id).map((fact) => fact.id),
+      (await service.getUsableWorkAuthorizationFacts(userId, goal.id)).map((fact) => fact.id),
       [available.id],
     );
   });
 
-  it('enforces the fact state machine and scrubs deleted fact history', () => {
+  it('enforces the fact state machine and scrubs deleted fact history', async () => {
     const { userId, service, store, context } = fixture();
-    const fact = service.createFact(
+    const fact = await service.createFact(
       userId,
       {
         kind: 'identity',
@@ -267,26 +264,26 @@ describe('ProfileService facts', () => {
       },
       context(),
     );
-    throws(
-      () => service.revokeFact(userId, fact.id, fact.version, context()),
+    await rejects(
+      service.revokeFact(userId, fact.id, fact.version, context()),
       (error: unknown) =>
         error instanceof ProfileError && error.code === 'STATE_TRANSITION_INVALID',
     );
-    const deleted = service.deleteFact(userId, fact.id, fact.version, context());
+    const deleted = await service.deleteFact(userId, fact.id, fact.version, context());
     equal(deleted.status, 'deleted');
     deepEqual(deleted.value, { deleted: true });
-    const serializedHistory = JSON.stringify(service.getFactVersions(userId, fact.id));
+    const serializedHistory = JSON.stringify(await service.getFactVersions(userId, fact.id));
     equal(serializedHistory.includes('Sensitive Name'), false);
     equal(JSON.stringify([...store.idempotency.values()]).includes('Sensitive Name'), false);
-    equal(service.listFacts(userId).length, 0);
-    equal(service.listFacts(userId, { include_deleted: true }).length, 1);
+    equal((await service.listFacts(userId)).length, 0);
+    equal((await service.listFacts(userId, { include_deleted: true })).length, 1);
   });
 });
 
 describe('ProfileService resume files, export and deletion', () => {
-  it('versions scan state and only exposes clean resume metadata as usable', () => {
+  it('versions scan state and only exposes clean resume metadata as usable', async () => {
     const { userId, service, context } = fixture();
-    const file = service.createFileMetadata(
+    const file = await service.createFileMetadata(
       userId,
       {
         purpose: 'resume_source',
@@ -297,30 +294,30 @@ describe('ProfileService resume files, export and deletion', () => {
       },
       context(),
     );
-    equal(service.listUsableResumeFiles(userId).length, 0);
-    const clean = service.updateFileScanStatus(userId, file.id, file.version, 'clean', context());
-    equal(service.listUsableResumeFiles(userId)[0]?.id, file.id);
-    const quarantined = service.updateFileScanStatus(
+    equal((await service.listUsableResumeFiles(userId)).length, 0);
+    const clean = await service.updateFileScanStatus(userId, file.id, file.version, 'clean', context());
+    equal((await service.listUsableResumeFiles(userId))[0]?.id, file.id);
+    const quarantined = await service.updateFileScanStatus(
       userId,
       file.id,
       clean.version,
       'quarantined',
       context(),
     );
-    equal(service.listUsableResumeFiles(userId).length, 0);
+    equal((await service.listUsableResumeFiles(userId)).length, 0);
     deepEqual(
-      service.getFileVersions(userId, file.id).map((version) => version.version),
+      (await service.getFileVersions(userId, file.id)).map((version) => version.version),
       [1, 2, 3],
     );
-    service.deleteFileMetadata(userId, file.id, quarantined.version, context());
-    equal(service.listFileMetadata(userId).length, 0);
+    await service.deleteFileMetadata(userId, file.id, quarantined.version, context());
+    equal((await service.listFileMetadata(userId)).length, 0);
   });
 
-  it('exports one tenant and deletes profile data while retaining content-free audit proof', () => {
+  it('exports one tenant and deletes profile data while retaining content-free audit proof', async () => {
     const { userId, otherUserId, service, context } = fixture();
-    createGoal(service, userId, context);
-    createGoal(service, otherUserId, () => context(otherUserId), 'Other tenant');
-    service.createFact(
+    await createGoal(service, userId, context);
+    await createGoal(service, otherUserId, () => context(otherUserId), 'Other tenant');
+    await service.createFact(
       userId,
       {
         kind: 'summary',
@@ -331,7 +328,7 @@ describe('ProfileService resume files, export and deletion', () => {
       context(),
     );
 
-    const exported = service.exportProfile(userId, context());
+    const exported = await service.exportProfile(userId, context());
     equal(exported.schema_version, '1.0.0');
     equal(exported.goals.length, 1);
     equal(exported.facts.length, 1);
@@ -340,12 +337,12 @@ describe('ProfileService resume files, export and deletion', () => {
       true,
     );
 
-    const counts = service.deleteUserProfile(userId, context());
+    const counts = await service.deleteUserProfile(userId, context());
     deepEqual(counts, { goals: 1, facts: 1, files: 0 });
-    equal(service.listGoals(userId, true).length, 0);
-    equal(service.listFacts(userId, { include_deleted: true }).length, 0);
-    equal(service.listGoals(otherUserId, true).length, 1);
-    const finalAudit = service.listAuditEvents(userId).at(-1);
+    equal((await service.listGoals(userId, true)).length, 0);
+    equal((await service.listFacts(userId, { include_deleted: true })).length, 0);
+    equal((await service.listGoals(otherUserId, true)).length, 1);
+    const finalAudit = (await service.listAuditEvents(userId)).at(-1);
     equal(finalAudit?.action, 'profile.deleted');
     equal(finalAudit?.resource.type, 'user');
     equal(JSON.stringify(finalAudit).includes('private summary'), false);
@@ -353,7 +350,7 @@ describe('ProfileService resume files, export and deletion', () => {
 });
 
 describe('ProfileService idempotency', () => {
-  it('replays identical creation and rejects an idempotency key reused with other input', () => {
+  it('replays identical creation and rejects an idempotency key reused with other input', async () => {
     const { userId, service } = fixture();
     const context: MutationContext = {
       actor_id: userId,
@@ -368,30 +365,29 @@ describe('ProfileService idempotency', () => {
       employment_types: ['full_time'] as const,
       status: 'active' as const,
     };
-    const first = service.createGoal(
+    const first = await service.createGoal(
       userId,
       { ...input, employment_types: [...input.employment_types] },
       context,
     );
-    const replay = service.createGoal(
+    const replay = await service.createGoal(
       userId,
       { ...input, employment_types: [...input.employment_types] },
       context,
     );
     equal(replay.id, first.id);
-    equal(service.listGoals(userId).length, 1);
-    equal(service.listAuditEvents(userId).length, 1);
-    throws(
-      () =>
-        service.createGoal(
-          userId,
-          {
-            ...input,
-            name: 'Changed',
-            employment_types: [...input.employment_types],
-          },
-          context,
-        ),
+    equal((await service.listGoals(userId)).length, 1);
+    equal((await service.listAuditEvents(userId)).length, 1);
+    await rejects(
+      service.createGoal(
+        userId,
+        {
+          ...input,
+          name: 'Changed',
+          employment_types: [...input.employment_types],
+        },
+        context,
+      ),
       (error: unknown) => error instanceof ProfileError && error.code === 'IDEMPOTENCY_KEY_REUSED',
     );
     notEqual(first.id, randomUUID());
@@ -400,40 +396,38 @@ describe('ProfileService idempotency', () => {
 });
 
 describe('ProfileService validation', () => {
-  it('returns domain validation errors for malformed runtime inputs', () => {
+  it('returns domain validation errors for malformed runtime inputs', async () => {
     const { userId, service, context } = fixture();
-    throws(
-      () =>
-        service.createGoal(
-          userId,
-          {
-            name: 'Backend',
-            title_keywords: ['Backend Engineer'],
-            locations: ['Remote'],
-            employment_types: ['full_time'],
-            status: 'active',
-          },
-          { ...context(), request_id: 'not-a-uuid' },
-        ),
+    await rejects(
+      service.createGoal(
+        userId,
+        {
+          name: 'Backend',
+          title_keywords: ['Backend Engineer'],
+          locations: ['Remote'],
+          employment_types: ['full_time'],
+          status: 'active',
+        },
+        { ...context(), request_id: 'not-a-uuid' },
+      ),
       (error: unknown) =>
         error instanceof ProfileError && error.code === 'VALIDATION_FAILED' && error.status === 400,
     );
-    throws(
-      () => service.createFileMetadata(userId, null as never, context()),
+    await rejects(
+      service.createFileMetadata(userId, null as never, context()),
       (error: unknown) => error instanceof ProfileError && error.code === 'VALIDATION_FAILED',
     );
-    throws(
-      () =>
-        service.createFact(
-          userId,
-          {
-            kind: 'skill',
-            value: { name: 'TypeScript' },
-            scope: { use: 'selected_goals', goal_ids: 'not-an-array' as never },
-            source: { type: 'user', reference: 'profile-form' },
-          },
-          context(),
-        ),
+    await rejects(
+      service.createFact(
+        userId,
+        {
+          kind: 'skill',
+          value: { name: 'TypeScript' },
+          scope: { use: 'selected_goals', goal_ids: 'not-an-array' as never },
+          source: { type: 'user', reference: 'profile-form' },
+        },
+        context(),
+      ),
       (error: unknown) => error instanceof ProfileError && error.code === 'VALIDATION_FAILED',
     );
   });
