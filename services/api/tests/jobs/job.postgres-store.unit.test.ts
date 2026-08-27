@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Pool } from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { PostgresJobStore } from '../../src/modules/jobs/job.postgres-store';
 import type { Job } from '../../src/modules/jobs/job.types';
@@ -80,6 +80,10 @@ describe.skipIf(!DATABASE_URL)('PostgresJobStore integration', () => {
   afterAll(async () => {
     await resetSchema(pool);
     await pool.end();
+  });
+
+  beforeEach(async () => {
+    await pool.query('TRUNCATE TABLE jobs');
   });
 
   it('round-trips a job including nested salary, source_refs and risk', async () => {
