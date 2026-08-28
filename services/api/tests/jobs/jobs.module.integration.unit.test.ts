@@ -3,8 +3,8 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { INestApplicationContext } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
+import { Test } from '@nestjs/testing';
+import type { TestingModule } from '@nestjs/testing';
 import { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -14,14 +14,7 @@ import type { JobImportDocument } from '../../src/modules/jobs/job.types';
 
 // This suite requires a live Postgres so it can also exercise the
 // "DATABASE_URL missing" failure path against the same environment used for
-// the happy path below. The @nestjs/testing package that would normally
-// provide Test.createTestingModule is not a dependency of services/api (not
-// present in services/api/package.json, package-lock.json or node_modules),
-// and this ticket's write scope is limited to this single test file, so
-// adding it is out of scope. This suite instead boots the module the same
-// way production does (NestFactory.createApplicationContext), which
-// exercises the identical @Module metadata, provider factory and DI
-// resolution that Test.createTestingModule would drive.
+// the happy path below.
 const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
@@ -89,20 +82,13 @@ function backendDocument(): JobImportDocument {
 describe.skipIf(!DATABASE_URL)('JobsModule integration', () => {
   let scopedDatabaseUrl: string;
   let verificationPool: Pool;
-  let app: INestApplicationContext | undefined;
+  let moduleRef: TestingModule | undefined;
 
-  async function createJobsApp(): Promise<INestApplicationContext> {
+  async function compileJobsModule(): Promise<TestingModule> {
     const originalDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = scopedDatabaseUrl;
     try {
-      // abortOnError defaults to true, which makes Nest call process.abort()
-      // on an initialization failure instead of rejecting this promise -
-      // that would kill the whole test worker rather than let us assert on
-      // the rejection, so it must be disabled here.
-      return await NestFactory.createApplicationContext(JobsModule, {
-        logger: false,
-        abortOnError: false,
-      });
+      return await Test.createTestingModule({ imports: [JobsModule] }).compile();
     } finally {
       process.env.DATABASE_URL = originalDatabaseUrl;
     }
@@ -129,9 +115,9 @@ describe.skipIf(!DATABASE_URL)('JobsModule integration', () => {
   });
 
   afterEach(async () => {
-    if (app) {
-      await app.close();
-      app = undefined;
+    if (moduleRef) {
+      await moduleRef.close();
+      moduleRef = undefined;
     }
   });
 
@@ -140,20 +126,17 @@ describe.skipIf(!DATABASE_URL)('JobsModule integration', () => {
     delete process.env.DATABASE_URL;
 
     try {
-      await expect(
-        NestFactory.createApplicationContext(JobsModule, {
-          logger: false,
-          abortOnError: false,
-        }),
-      ).rejects.toThrow(/DATABASE_URL is not set/);
+      await expect(Test.createTestingModule({ imports: [JobsModule] }).compile()).rejects.toThrow(
+        /DATABASE_URL is not set/,
+      );
     } finally {
       process.env.DATABASE_URL = originalDatabaseUrl;
     }
   });
 
   it('resolves a JobService backed by PostgresJobStore and persists imported jobs to Postgres', async () => {
-    app = await createJobsApp();
-    const jobService = app.get(JobService);
+    moduleRef = await compileJobsModule();
+    const jobService = moduleRef.get(JobService);
     expect(jobService).toBeInstanceOf(JobService);
 
     const now = '2026-08-27T00:00:00.000Z';
@@ -189,8 +172,8 @@ describe.skipIf(!DATABASE_URL)('JobsModule integration', () => {
   });
 
   it('does not leave a row behind for an id that was never imported', async () => {
-    app = await createJobsApp();
-    const jobService = app.get(JobService);
+    moduleRef = await compileJobsModule();
+    const jobService = moduleRef.get(JobService);
 
     const unknownId = randomUUID();
     expect(await jobService.getJob(unknownId)).toBeNull();
