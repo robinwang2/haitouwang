@@ -121,14 +121,20 @@ describe.skipIf(!DATABASE_URL)('JobsModule integration', () => {
     }
   });
 
-  it('fails to compile the module when DATABASE_URL is not set', async () => {
+  it('compiles the module when DATABASE_URL is not set, but fails the first store access', async () => {
     const originalDatabaseUrl = process.env.DATABASE_URL;
     delete process.env.DATABASE_URL;
 
     try {
-      await expect(Test.createTestingModule({ imports: [JobsModule] }).compile()).rejects.toThrow(
-        /DATABASE_URL is not set/,
-      );
+      const unconfiguredModuleRef = await Test.createTestingModule({
+        imports: [JobsModule],
+      }).compile();
+      try {
+        const jobService = unconfiguredModuleRef.get(JobService);
+        await expect(jobService.listJobs()).rejects.toThrow(/DATABASE_URL is not set/);
+      } finally {
+        await unconfiguredModuleRef.close();
+      }
     } finally {
       process.env.DATABASE_URL = originalDatabaseUrl;
     }
