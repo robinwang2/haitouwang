@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 
+import { AuthService } from '../../auth.service';
 import { createLazyPostgresStore } from '../../common/lazy-postgres-store';
 import { PROFILE_STORE } from './profile-store.interface';
 import type { ProfileStore } from './profile-store.interface';
+import { ProfileController } from './profile.controller';
 import { ProfileService } from './profile.service';
 import { PostgresProfileStore } from './profile.postgres-store';
 
@@ -46,7 +48,16 @@ function createProfileStore(): ProfileStore {
 }
 
 @Module({
-  providers: [{ provide: PROFILE_STORE, useFactory: createProfileStore }, ProfileService],
+  controllers: [ProfileController],
+  providers: [
+    { provide: PROFILE_STORE, useFactory: createProfileStore },
+    ProfileService,
+    // BearerAuthGuard (used by ProfileController) depends on AuthService. AppModule also
+    // provides AuthService, but Nest module DI is not ambient across sibling imports, so
+    // this module needs its own instance; AuthService is stateless (reads env at
+    // construction only), so a second instance is safe.
+    AuthService,
+  ],
   exports: [ProfileService],
 })
 export class ProfileModule {}

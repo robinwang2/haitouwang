@@ -1,4 +1,5 @@
 export * from './profile-store.interface';
+export * from './profile.controller';
 export * from './profile.errors';
 export * from './profile.module';
 export * from './profile.postgres-store';
