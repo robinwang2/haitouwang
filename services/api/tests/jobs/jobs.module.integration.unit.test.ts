@@ -14,13 +14,14 @@ import type { JobImportDocument } from '../../src/modules/jobs/job.types';
 
 // This suite requires a live Postgres so it can also exercise the
 // "DATABASE_URL missing" failure path against the same environment used for
-// the happy path below (see the first `it`, which temporarily deletes and
-// restores process.env.DATABASE_URL). The @nestjs/testing package that would
-// normally provide Test.createTestingModule is not a dependency of
-// services/api, so this suite boots the module the same way production does
-// (NestFactory.createApplicationContext), which exercises the identical
-// @Module metadata, provider factory and DI resolution as
-// Test.createTestingModule would.
+// the happy path below. The @nestjs/testing package that would normally
+// provide Test.createTestingModule is not a dependency of services/api (not
+// present in services/api/package.json, package-lock.json or node_modules),
+// and this ticket's write scope is limited to this single test file, so
+// adding it is out of scope. This suite instead boots the module the same
+// way production does (NestFactory.createApplicationContext), which
+// exercises the identical @Module metadata, provider factory and DI
+// resolution that Test.createTestingModule would drive.
 const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
@@ -35,16 +36,35 @@ const MIGRATIONS_DIR = path.resolve(
   '../../../../infra/db/migrations/jobs',
 );
 
-async function migrationSql(suffix: '.up.sql' | '.down.sql'): Promise<string[]> {
-  const files = (await readdir(MIGRATIONS_DIR)).filter((file) => file.endsWith(suffix)).sort();
+// Dedicated to this suite only: job.postgres-store.unit.test.ts owns the
+// default `public` schema (it drops and recreates `public.jobs` around its
+// own tests). Running both suites' schema setup against the same table in
+// parallel vitest workers is inherently racy ("relation jobs does not
+// exist"), so this suite creates and owns an entirely separate Postgres
+// schema instead of sharing `public`, and never touches `public.jobs`.
+const SCHEMA_NAME = 'jobs_module_integration_test';
+
+async function migrationUpSql(): Promise<string[]> {
+  const files = (await readdir(MIGRATIONS_DIR))
+    .filter((file) => file.endsWith('.up.sql'))
+    .sort();
   return Promise.all(files.map((file) => readFile(path.join(MIGRATIONS_DIR, file), 'utf8')));
 }
 
-async function resetSchema(pool: Pool): Promise<void> {
-  const downSqls = (await migrationSql('.down.sql')).reverse();
-  for (const sql of downSqls) {
-    await pool.query(sql);
-  }
+// Appends a libpq `options=-c search_path=...` parameter to the connection
+// string so every session opened from the resulting URL - both this file's
+// own verification pool and the pg.Pool that PostgresJobStore builds from
+// process.env.DATABASE_URL - resolves unqualified `jobs` to
+// `jobs_module_integration_test.jobs` instead of `public.jobs`.
+function withDedicatedSchema(databaseUrl: string): string {
+  const url = new URL(databaseUrl);
+  const searchPathOption = `-c search_path=${SCHEMA_NAME}`;
+  const existingOptions = url.searchParams.get('options');
+  url.searchParams.set(
+    'options',
+    existingOptions ? `${existingOptions} ${searchPathOption}` : searchPathOption,
+  );
+  return url.toString();
 }
 
 function backendDocument(): JobImportDocument {
@@ -67,20 +87,40 @@ function backendDocument(): JobImportDocument {
 }
 
 describe.skipIf(!DATABASE_URL)('JobsModule integration', () => {
+  let scopedDatabaseUrl: string;
   let verificationPool: Pool;
   let app: INestApplicationContext | undefined;
 
+  async function createJobsApp(): Promise<INestApplicationContext> {
+    const originalDatabaseUrl = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = scopedDatabaseUrl;
+    try {
+      // abortOnError defaults to true, which makes Nest call process.abort()
+      // on an initialization failure instead of rejecting this promise -
+      // that would kill the whole test worker rather than let us assert on
+      // the rejection, so it must be disabled here.
+      return await NestFactory.createApplicationContext(JobsModule, {
+        logger: false,
+        abortOnError: false,
+      });
+    } finally {
+      process.env.DATABASE_URL = originalDatabaseUrl;
+    }
+  }
+
   beforeAll(async () => {
-    verificationPool = new Pool({ connectionString: DATABASE_URL });
-    await resetSchema(verificationPool);
-    const upSqls = await migrationSql('.up.sql');
+    scopedDatabaseUrl = withDedicatedSchema(DATABASE_URL as string);
+    verificationPool = new Pool({ connectionString: scopedDatabaseUrl });
+    await verificationPool.query(`DROP SCHEMA IF EXISTS ${SCHEMA_NAME} CASCADE`);
+    await verificationPool.query(`CREATE SCHEMA ${SCHEMA_NAME}`);
+    const upSqls = await migrationUpSql();
     for (const sql of upSqls) {
       await verificationPool.query(sql);
     }
   });
 
   afterAll(async () => {
-    await resetSchema(verificationPool);
+    await verificationPool.query(`DROP SCHEMA IF EXISTS ${SCHEMA_NAME} CASCADE`);
     await verificationPool.end();
   });
 
@@ -100,10 +140,6 @@ describe.skipIf(!DATABASE_URL)('JobsModule integration', () => {
     delete process.env.DATABASE_URL;
 
     try {
-      // abortOnError defaults to true, which makes Nest call process.abort()
-      // on an initialization failure instead of rejecting this promise -
-      // that would kill the whole test worker rather than let us assert on
-      // the rejection, so it must be disabled here.
       await expect(
         NestFactory.createApplicationContext(JobsModule, {
           logger: false,
@@ -116,10 +152,7 @@ describe.skipIf(!DATABASE_URL)('JobsModule integration', () => {
   });
 
   it('resolves a JobService backed by PostgresJobStore and persists imported jobs to Postgres', async () => {
-    app = await NestFactory.createApplicationContext(JobsModule, {
-      logger: false,
-      abortOnError: false,
-    });
+    app = await createJobsApp();
     const jobService = app.get(JobService);
     expect(jobService).toBeInstanceOf(JobService);
 
@@ -137,8 +170,8 @@ describe.skipIf(!DATABASE_URL)('JobsModule integration', () => {
     expect(listed.map((entry) => entry.id)).toEqual([job.id]);
 
     // Bypass JobService/PostgresJobStore entirely and query the same
-    // DATABASE_URL directly with a fresh pg client, so a passing test can
-    // only mean the row actually landed in Postgres (not an in-memory
+    // dedicated schema directly with a fresh pg client, so a passing test
+    // can only mean the row actually landed in Postgres (not an in-memory
     // fallback that happens to satisfy JobService's own read path).
     const { rows } = await verificationPool.query<{
       id: string;
@@ -156,10 +189,7 @@ describe.skipIf(!DATABASE_URL)('JobsModule integration', () => {
   });
 
   it('does not leave a row behind for an id that was never imported', async () => {
-    app = await NestFactory.createApplicationContext(JobsModule, {
-      logger: false,
-      abortOnError: false,
-    });
+    app = await createJobsApp();
     const jobService = app.get(JobService);
 
     const unknownId = randomUUID();
