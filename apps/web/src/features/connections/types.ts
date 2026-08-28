@@ -3,17 +3,9 @@ import type { AuditReceipt } from '../automation/types';
 export type AgentContractStatus = 'unpaired' | 'pairing' | 'online' | 'offline' | 'revoked';
 
 export type ConnectionDisplayStatus =
-  | AgentContractStatus
-  | 'authorization_expiring'
-  | 'expired'
-  | 'paused'
-  | 'error'
-  | 'unknown';
+  AgentContractStatus | 'authorization_expiring' | 'expired' | 'paused' | 'error' | 'unknown';
 
-export type AgentScope =
-  | 'agent:commands:claim'
-  | 'agent:receipts:write'
-  | 'agent:heartbeat:write';
+export type AgentScope = 'agent:commands:claim' | 'agent:receipts:write' | 'agent:heartbeat:write';
 
 export interface AgentConnection {
   readonly id: string;

@@ -33,7 +33,8 @@ export const jobsMessages = {
     gaps: 'Potential gaps',
     strategy: 'Application strategy',
     descriptionHeading: 'Job description',
-    descriptionUnavailable: 'The current Job contract exposes description status but not description text. Use the verified source link below.',
+    descriptionUnavailable:
+      'The current Job contract exposes description status but not description text. Use the verified source link below.',
     sourceHistory: 'Source and merge record',
     addToReview: 'Add to review and generate',
     createManualReview: 'Create manual review task',
@@ -43,7 +44,8 @@ export const jobsMessages = {
     reportRisk: 'Report incorrect risk assessment',
     readOnly: 'Viewing only. Editing permission is required for this action.',
     pausedTitle: 'Generation and assisted filling are paused',
-    pausedBody: 'Search and job details remain available. Actions that start new work are disabled.',
+    pausedBody:
+      'Search and job details remain available. Actions that start new work are disabled.',
     emptyTitle: 'Import your first job',
     emptyBody: 'Use a Greenhouse, Lever, company Careers, or manual URL.',
     filteredEmptyTitle: 'No jobs match these filters',
@@ -56,7 +58,8 @@ export const jobsMessages = {
     retry: 'Retry job pool',
     requestId: 'Request ID',
     permissionTitle: 'Job details are unavailable',
-    permissionBody: 'You do not have permission to view this resource. No cached job details are shown.',
+    permissionBody:
+      'You do not have permission to view this resource. No cached job details are shown.',
     back: 'Return home',
     importTitle: 'Import a job URL',
     importHelp: 'Supported sources: Greenhouse, Lever, company Careers, and manual URL.',

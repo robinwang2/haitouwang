@@ -13,14 +13,21 @@ export function matchBand(total: number): Exclude<MatchFilter, 'all'> {
   return 'low';
 }
 
-export function scoreDecisionLabel(decision: Score['decision'] | string): 'eligible' | 'blocked' | 'manual' | 'unknown' {
+export function scoreDecisionLabel(
+  decision: Score['decision'] | string,
+): 'eligible' | 'blocked' | 'manual' | 'unknown' {
   if (decision === 'eligible') return 'eligible';
   if (decision === 'blocked') return 'blocked';
   if (decision === 'manual_review') return 'manual';
   return 'unknown';
 }
 
-export function jobCanStartReview(job: Job, score: Score, canEdit: boolean, paused: boolean): boolean {
+export function jobCanStartReview(
+  job: Job,
+  score: Score,
+  canEdit: boolean,
+  paused: boolean,
+): boolean {
   return (
     canEdit &&
     !paused &&
@@ -41,8 +48,12 @@ export function filterJobs(
   return jobs.filter((job) => {
     const score = scores.find((item) => item.job_id === job.id);
     const matchesQuery =
-      !query || [job.title, job.company, job.location].some((value) => value.toLocaleLowerCase().includes(query));
-    const matchesBand = filters.match === 'all' || (score ? matchBand(score.total) === filters.match : false);
+      !query ||
+      [job.title, job.company, job.location].some((value) =>
+        value.toLocaleLowerCase().includes(query),
+      );
+    const matchesBand =
+      filters.match === 'all' || (score ? matchBand(score.total) === filters.match : false);
     const matchesRisk = filters.risk === 'all' || job.risk.level === filters.risk;
     return matchesQuery && matchesBand && matchesRisk;
   });
@@ -61,7 +72,10 @@ export function inferJobSource(url: string): JobSource {
   const hostname = new URL(url).hostname.toLocaleLowerCase();
   if (hostname.includes('greenhouse.io')) return 'greenhouse';
   if (hostname === 'jobs.lever.co' || hostname.endsWith('.lever.co')) return 'lever';
-  if (hostname.includes('careers') || new URL(url).pathname.toLocaleLowerCase().includes('career')) {
+  if (
+    hostname.includes('careers') ||
+    new URL(url).pathname.toLocaleLowerCase().includes('career')
+  ) {
     return 'company_careers';
   }
   return 'manual_url';

@@ -12,7 +12,8 @@ export function nextProfileTab(current: ProfileTab, key: string): ProfileTab | n
   const index = profileTabs.indexOf(current);
   if (key === 'Home') return profileTabs[0];
   if (key === 'End') return profileTabs.at(-1) ?? null;
-  if (key === 'ArrowRight' || key === 'ArrowDown') return profileTabs[(index + 1) % profileTabs.length];
+  if (key === 'ArrowRight' || key === 'ArrowDown')
+    return profileTabs[(index + 1) % profileTabs.length];
   if (key === 'ArrowLeft' || key === 'ArrowUp') {
     return profileTabs[(index - 1 + profileTabs.length) % profileTabs.length];
   }
@@ -31,10 +32,17 @@ export function validateGoal(input: {
   return errors;
 }
 
-export function factStatusTone(status: FactStatus | string): 'positive' | 'warning' | 'danger' | 'neutral' {
+export function factStatusTone(
+  status: FactStatus | string,
+): 'positive' | 'warning' | 'danger' | 'neutral' {
   if (status === 'active') return 'positive';
   if (status === 'pending_confirmation') return 'warning';
-  if (status === 'expired' || status === 'prohibited' || status === 'rejected' || status === 'revoked') {
+  if (
+    status === 'expired' ||
+    status === 'prohibited' ||
+    status === 'rejected' ||
+    status === 'revoked'
+  ) {
     return 'danger';
   }
   return 'neutral';

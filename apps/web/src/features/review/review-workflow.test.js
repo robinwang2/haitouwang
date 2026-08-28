@@ -1,11 +1,8 @@
-const assert = require('node:assert/strict');
-const test = require('node:test');
-const { mockReviewCase } = require('./mock-data.ts');
-const {
-  canApprove,
-  getApprovalBlockers,
-  InMemoryReviewDecisionGateway,
-} = require('./review-workflow.ts');
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { mockReviewCase } from './mock-data';
+import { canApprove, getApprovalBlockers, InMemoryReviewDecisionGateway } from './review-workflow';
 
 const capabilities = { canViewFacts: true, canEdit: true, canDecide: true };
 const context = {
@@ -20,9 +17,17 @@ const context = {
 function approvableReview() {
   return {
     ...mockReviewCase,
-    findings: mockReviewCase.findings.map((finding) => ({ ...finding, status: 'resolved', resolution: 'test revision' })),
+    findings: mockReviewCase.findings.map((finding) => ({
+      ...finding,
+      status: 'resolved',
+      resolution: 'test revision',
+    })),
     questions: mockReviewCase.questions.map((question) => ({ ...question, answer: '10' })),
-    evidence: mockReviewCase.evidence.map((evidence) => ({ ...evidence, allowed: true, state: 'confirmed' })),
+    evidence: mockReviewCase.evidence.map((evidence) => ({
+      ...evidence,
+      allowed: true,
+      state: 'confirmed',
+    })),
   };
 }
 
@@ -60,20 +65,45 @@ test('edit, answer, finding resolution, and rejection decisions each append one 
   const material = mockReviewCase.materials[0];
   const statement = material.statements[0];
 
-  const edited = await gateway.saveMaterialEdit(mockReviewCase, material.id, statement.id, 'Updated statement', context);
-  const answered = await gateway.answerQuestion(edited.review, 'question-team-size', '确认', context);
-  const resolved = await gateway.resolveFinding(answered.review, 'finding-team-size', 'Confirmed team size with the user', context);
-  const rejected = await gateway.reject(resolved.review, 'POSITIONING_MISMATCH', 'Use a different version', capabilities, context);
+  const edited = await gateway.saveMaterialEdit(
+    mockReviewCase,
+    material.id,
+    statement.id,
+    'Updated statement',
+    context,
+  );
+  const answered = await gateway.answerQuestion(
+    edited.review,
+    'question-team-size',
+    '确认',
+    context,
+  );
+  const resolved = await gateway.resolveFinding(
+    answered.review,
+    'finding-team-size',
+    'Confirmed team size with the user',
+    context,
+  );
+  const rejected = await gateway.reject(
+    resolved.review,
+    'POSITIONING_MISMATCH',
+    'Use a different version',
+    capabilities,
+    context,
+  );
 
   assert.equal(edited.accepted, true);
   assert.equal(answered.accepted, true);
   assert.equal(resolved.accepted, true);
   assert.equal(rejected.accepted, true);
-  assert.deepEqual(gateway.auditEvents.map((event) => event.action), [
-    'review.material_edited',
-    'review.question_answered',
-    'review.finding_resolved',
-    'review.rejected',
-  ]);
+  assert.deepEqual(
+    gateway.auditEvents.map((event) => event.action),
+    [
+      'review.material_edited',
+      'review.question_answered',
+      'review.finding_resolved',
+      'review.rejected',
+    ],
+  );
   assert.ok(gateway.auditEvents.every((event) => event.outcome === 'succeeded'));
 });

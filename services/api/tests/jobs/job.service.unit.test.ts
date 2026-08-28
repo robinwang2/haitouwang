@@ -55,7 +55,9 @@ describe('JobService.importJobs', () => {
   it('inserts new jobs at version 1 and passes through getJob/listJobs', async () => {
     const { service } = fixture();
 
-    const imported = await service.importJobs([backendDocument(), frontendDocument()], { now: NOW });
+    const imported = await service.importJobs([backendDocument(), frontendDocument()], {
+      now: NOW,
+    });
 
     expect(imported).toHaveLength(2);
     expect(imported.every((job) => job.version === 1)).toBe(true);

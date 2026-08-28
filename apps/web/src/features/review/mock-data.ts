@@ -109,13 +109,48 @@ export const mockReviewCase: ReviewCase = {
     },
   ],
   reviewerResults: [
-    { reviewer: 'ats', status: 'completed', summary: '关键词覆盖良好，存在一项优化建议。', evidenceRefs: [] },
-    { reviewer: 'hard_requirements', status: 'completed', summary: '满足三项硬条件。', evidenceRefs: [] },
-    { reviewer: 'matching', status: 'completed', summary: '经历与岗位范围匹配。', evidenceRefs: [] },
-    { reviewer: 'skeptical_recruiter', status: 'completed', summary: '团队规模陈述需核实。', evidenceRefs: [] },
-    { reviewer: 'hiring_manager', status: 'completed', summary: '技术影响描述具体。', evidenceRefs: [] },
-    { reviewer: 'fact_check', status: 'completed', summary: '发现一项待确认事实。', evidenceRefs: [] },
-    { reviewer: 'naturalness', status: 'completed', summary: '语言自然，无明显模板痕迹。', evidenceRefs: [] },
+    {
+      reviewer: 'ats',
+      status: 'completed',
+      summary: '关键词覆盖良好，存在一项优化建议。',
+      evidenceRefs: [],
+    },
+    {
+      reviewer: 'hard_requirements',
+      status: 'completed',
+      summary: '满足三项硬条件。',
+      evidenceRefs: [],
+    },
+    {
+      reviewer: 'matching',
+      status: 'completed',
+      summary: '经历与岗位范围匹配。',
+      evidenceRefs: [],
+    },
+    {
+      reviewer: 'skeptical_recruiter',
+      status: 'completed',
+      summary: '团队规模陈述需核实。',
+      evidenceRefs: [],
+    },
+    {
+      reviewer: 'hiring_manager',
+      status: 'completed',
+      summary: '技术影响描述具体。',
+      evidenceRefs: [],
+    },
+    {
+      reviewer: 'fact_check',
+      status: 'completed',
+      summary: '发现一项待确认事实。',
+      evidenceRefs: [],
+    },
+    {
+      reviewer: 'naturalness',
+      status: 'completed',
+      summary: '语言自然，无明显模板痕迹。',
+      evidenceRefs: [],
+    },
   ],
   questions: [
     {

@@ -13,19 +13,25 @@ export type DashboardTodo = {
   priority: number;
 };
 
-export function resolveDashboardState(state: DashboardPageState, canView: boolean): DashboardPageState {
+export function resolveDashboardState(
+  state: DashboardPageState,
+  canView: boolean,
+): DashboardPageState {
   return canView ? state : 'permission';
 }
 
 export function agentSafety(agent: Agent | undefined): 'online' | 'offline' | 'unknown' {
   if (!agent) return 'unknown';
   if (agent.status === 'online') return 'online';
-  if (agent.status === 'offline' || agent.status === 'revoked' || agent.status === 'unpaired') return 'offline';
+  if (agent.status === 'offline' || agent.status === 'revoked' || agent.status === 'unpaired')
+    return 'offline';
   return 'unknown';
 }
 
 export function isVerifiedSubmission(application: Application): boolean {
-  return application.status === 'submitted' && application.evidence.some((evidence) => evidence.verified);
+  return (
+    application.status === 'submitted' && application.evidence.some((evidence) => evidence.verified)
+  );
 }
 
 export function applicationTodoKind(status: Application['status']): TodoKind | null {
@@ -41,14 +47,18 @@ export function buildTodos(applications: Application[], tasks: Task[]): Dashboar
     const kind = applicationTodoKind(application.status);
     if (!kind) return [];
     const priority = kind === 'manual' ? 0 : kind === 'uncertain' ? 1 : kind === 'confirm' ? 2 : 3;
-    return [{
-      id: application.id,
-      kind,
-      title: `Application ${application.id.slice(-4)}`,
-      detail: application.manual_reason?.replaceAll('_', ' ') ?? application.status.replaceAll('_', ' '),
-      updatedAt: application.updated_at,
-      priority,
-    }];
+    return [
+      {
+        id: application.id,
+        kind,
+        title: `Application ${application.id.slice(-4)}`,
+        detail:
+          application.manual_reason?.replaceAll('_', ' ') ??
+          application.status.replaceAll('_', ' '),
+        updatedAt: application.updated_at,
+        priority,
+      },
+    ];
   });
   const manualTasks = tasks
     .filter((task) => task.status === 'requires_human')

@@ -136,10 +136,18 @@ describe.skipIf(!DATABASE_URL)('PostgresJobStore integration', () => {
     await store.saveJob(greenhouseJob);
     await store.saveJob(leverJob);
 
-    expect((await store.listJobs({ source: 'greenhouse' })).map((j) => j.id)).toEqual([greenhouseJob.id]);
-    expect((await store.listJobs({ status: 'discovered' })).map((j) => j.id)).toEqual([leverJob.id]);
-    expect((await store.listJobs({ employmentType: 'contract' })).map((j) => j.id)).toEqual([leverJob.id]);
-    expect((await store.listJobs({ company: 'Acme' })).map((j) => j.id)).toEqual([greenhouseJob.id]);
+    expect((await store.listJobs({ source: 'greenhouse' })).map((j) => j.id)).toEqual([
+      greenhouseJob.id,
+    ]);
+    expect((await store.listJobs({ status: 'discovered' })).map((j) => j.id)).toEqual([
+      leverJob.id,
+    ]);
+    expect((await store.listJobs({ employmentType: 'contract' })).map((j) => j.id)).toEqual([
+      leverJob.id,
+    ]);
+    expect((await store.listJobs({ company: 'Acme' })).map((j) => j.id)).toEqual([
+      greenhouseJob.id,
+    ]);
     expect((await store.listJobs()).map((j) => j.id).sort()).toEqual(
       [greenhouseJob.id, leverJob.id].sort(),
     );

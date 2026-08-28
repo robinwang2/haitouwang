@@ -1,8 +1,4 @@
-export type AutomationCapability =
-  | 'search'
-  | 'material_generation'
-  | 'assisted_fill'
-  | 'submit';
+export type AutomationCapability = 'search' | 'material_generation' | 'assisted_fill' | 'submit';
 
 export type MutableAutomationCapability = Exclude<AutomationCapability, 'submit'>;
 

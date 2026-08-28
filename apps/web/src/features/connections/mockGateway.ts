@@ -129,11 +129,7 @@ export function createConnectionsMockGateway(
         deviceName: record.value.deviceName ?? '本地代理',
         publicKeyThumbprint: record.value.publicKeyThumbprint,
         status: 'online',
-        scopes: [
-          'agent:commands:claim',
-          'agent:receipts:write',
-          'agent:heartbeat:write',
-        ],
+        scopes: ['agent:commands:claim', 'agent:receipts:write', 'agent:heartbeat:write'],
         pairedAt: now,
         lastSeenAt: now,
         authorizationExpiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),

@@ -66,13 +66,19 @@ export function ProfileWorkspace({
     return (
       <main className={styles.shell}>
         <section className={styles.statePanel} role="alert">
-          <span className={styles.stateIcon} aria-hidden="true">!</span>
+          <span className={styles.stateIcon} aria-hidden="true">
+            !
+          </span>
           <div>
             <h1>{copy.errorTitle}</h1>
             <p>{copy.errorBody}</p>
-            <p className={styles.requestId}>{copy.requestLabel}: {requestId}</p>
+            <p className={styles.requestId}>
+              {copy.requestLabel}: {requestId}
+            </p>
           </div>
-          <button className={styles.primaryButton} onClick={onRetry} type="button">{copy.retry}</button>
+          <button className={styles.primaryButton} onClick={onRetry} type="button">
+            {copy.retry}
+          </button>
         </section>
       </main>
     );
@@ -83,7 +89,9 @@ export function ProfileWorkspace({
     <main className={styles.shell}>
       {pageState === 'paused' && (
         <aside className={styles.pauseBanner} role="status">
-          <span className={styles.pauseMark} aria-hidden="true">Ⅱ</span>
+          <span className={styles.pauseMark} aria-hidden="true">
+            Ⅱ
+          </span>
           <div>
             <strong>{copy.pausedTitle}</strong>
             <p>{copy.pausedBody}</p>
@@ -100,7 +108,9 @@ export function ProfileWorkspace({
         <div className={styles.readiness} aria-label={`${copy.progress}: 72%`}>
           <span>{copy.progress}</span>
           <strong>72%</strong>
-          <div className={styles.progressTrack} aria-hidden="true"><span /></div>
+          <div className={styles.progressTrack} aria-hidden="true">
+            <span />
+          </div>
         </div>
       </header>
 
@@ -114,13 +124,19 @@ export function ProfileWorkspace({
             key={item}
             onClick={() => setTab(item)}
             onKeyDown={onTabKeyDown}
-            ref={(node) => { tabRefs.current[item] = node; }}
+            ref={(node) => {
+              tabRefs.current[item] = node;
+            }}
             role="tab"
             tabIndex={tab === item ? 0 : -1}
             type="button"
           >
             {copy.tabs[item]}
-            {item === 'facts' && <span className={styles.count}>{facts.filter((fact) => fact.status === 'pending_confirmation').length}</span>}
+            {item === 'facts' && (
+              <span className={styles.count}>
+                {facts.filter((fact) => fact.status === 'pending_confirmation').length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -148,10 +164,17 @@ export function ProfileWorkspace({
           />
         )}
         {tab === 'resumes' && (
-          <ResumeLibrary canEdit={capabilities.canEdit} copy={copy} locale={locale} materials={materials} />
+          <ResumeLibrary
+            canEdit={capabilities.canEdit}
+            copy={copy}
+            locale={locale}
+            materials={materials}
+          />
         )}
       </section>
-      <p className={styles.srOnly} role="status" aria-live="polite">{announcement}</p>
+      <p className={styles.srOnly} role="status" aria-live="polite">
+        {announcement}
+      </p>
     </main>
   );
 }
@@ -188,22 +211,41 @@ function OnboardingForm({
   return (
     <form className={styles.formLayout} noValidate onSubmit={submit}>
       <div className={styles.sectionHeading}>
-        <span className={styles.stepNumber} aria-hidden="true">01</span>
-        <div><h2>{copy.goalHeading}</h2><p>{copy.description}</p></div>
+        <span className={styles.stepNumber} aria-hidden="true">
+          01
+        </span>
+        <div>
+          <h2>{copy.goalHeading}</h2>
+          <p>{copy.description}</p>
+        </div>
       </div>
       {errors.length > 0 && (
         <div className={styles.errorSummary} ref={errorRef} role="alert" tabIndex={-1}>
           <strong>{copy.requiredSummary}</strong>
           <ul>
-            {errors.includes('name') && <li><a href="#goal-name">{copy.nameRequired}</a></li>}
-            {errors.includes('keywords') && <li><a href="#role-keywords">{copy.keywordsRequired}</a></li>}
-            {errors.includes('employmentTypes') && <li><a href="#employment-full-time">{copy.employmentRequired}</a></li>}
+            {errors.includes('name') && (
+              <li>
+                <a href="#goal-name">{copy.nameRequired}</a>
+              </li>
+            )}
+            {errors.includes('keywords') && (
+              <li>
+                <a href="#role-keywords">{copy.keywordsRequired}</a>
+              </li>
+            )}
+            {errors.includes('employmentTypes') && (
+              <li>
+                <a href="#employment-full-time">{copy.employmentRequired}</a>
+              </li>
+            )}
           </ul>
         </div>
       )}
       <div className={styles.formGrid}>
         <label className={styles.field}>
-          <span>{copy.goalName} <small>{copy.required}</small></span>
+          <span>
+            {copy.goalName} <small>{copy.required}</small>
+          </span>
           <input
             aria-describedby={errors.includes('name') ? 'goal-name-error' : undefined}
             aria-invalid={errors.includes('name')}
@@ -215,7 +257,9 @@ function OnboardingForm({
           {errors.includes('name') && <em id="goal-name-error">{copy.nameRequired}</em>}
         </label>
         <label className={styles.field}>
-          <span>{copy.roleKeywords} <small>{copy.required}</small></span>
+          <span>
+            {copy.roleKeywords} <small>{copy.required}</small>
+          </span>
           <input
             aria-describedby={errors.includes('keywords') ? 'role-keywords-error' : undefined}
             aria-invalid={errors.includes('keywords')}
@@ -232,7 +276,11 @@ function OnboardingForm({
         </label>
         <label className={styles.field}>
           <span>{copy.authorization}</span>
-          <select defaultValue={goal.work_authorization_rule} disabled={!canEdit} name="authorization">
+          <select
+            defaultValue={goal.work_authorization_rule}
+            disabled={!canEdit}
+            name="authorization"
+          >
             <option value="authorized">{copy.authorized}</option>
             <option value="requires_sponsorship">{copy.sponsorship}</option>
             <option value="unknown">{copy.authorizationUnknown}</option>
@@ -241,17 +289,34 @@ function OnboardingForm({
         </label>
       </div>
       <fieldset className={styles.checkGroup}>
-        <legend>{copy.employment} <small>{copy.required}</small></legend>
+        <legend>
+          {copy.employment} <small>{copy.required}</small>
+        </legend>
         <label>
-          <input defaultChecked disabled={!canEdit} id="employment-full-time" name="employment-type" type="checkbox" value="full_time" />
+          <input
+            defaultChecked
+            disabled={!canEdit}
+            id="employment-full-time"
+            name="employment-type"
+            type="checkbox"
+            value="full_time"
+          />
           {copy.fullTime}
         </label>
-        <label><input disabled={!canEdit} name="employment-type" type="checkbox" value="contract" /> {copy.contract}</label>
-        <label><input disabled={!canEdit} name="employment-type" type="checkbox" value="internship" /> {copy.internship}</label>
+        <label>
+          <input disabled={!canEdit} name="employment-type" type="checkbox" value="contract" />{' '}
+          {copy.contract}
+        </label>
+        <label>
+          <input disabled={!canEdit} name="employment-type" type="checkbox" value="internship" />{' '}
+          {copy.internship}
+        </label>
       </fieldset>
       <div className={styles.formFooter}>
         {!canEdit && <p className={styles.readonlyNote}>{copy.readonly}</p>}
-        <button className={styles.primaryButton} disabled={!canEdit} type="submit">{copy.saveGoal}</button>
+        <button className={styles.primaryButton} disabled={!canEdit} type="submit">
+          {copy.saveGoal}
+        </button>
       </div>
     </form>
   );
@@ -271,26 +336,48 @@ function FactConfirmation({
   const [decisions, setDecisions] = useState<Record<string, 'confirmed' | 'rejected'>>({});
   return (
     <div>
-      <div className={styles.contentTitle}><div><h2>{copy.factHeading}</h2><p>{copy.factHelp}</p></div></div>
+      <div className={styles.contentTitle}>
+        <div>
+          <h2>{copy.factHeading}</h2>
+          <p>{copy.factHelp}</p>
+        </div>
+      </div>
       {!canEdit && <p className={styles.readonlyNote}>{copy.readonly}</p>}
       <ul className={styles.factList}>
         {facts.map((fact) => {
-          const status = decisions[fact.id] === 'confirmed' ? 'active' : decisions[fact.id] === 'rejected' ? 'rejected' : fact.status;
-          const labelKey = statusCopy[status] ?? (status === 'rejected' ? 'rejected' : 'unavailable');
+          const status =
+            decisions[fact.id] === 'confirmed'
+              ? 'active'
+              : decisions[fact.id] === 'rejected'
+                ? 'rejected'
+                : fact.status;
+          const labelKey =
+            statusCopy[status] ?? (status === 'rejected' ? 'rejected' : 'unavailable');
           return (
             <li className={styles.factCard} key={fact.id}>
               <div className={styles.factTopline}>
                 <span className={styles.kind}>{fact.kind.replace('_', ' ')}</span>
                 <span className={`${styles.badge} ${styles[factStatusTone(status)]}`}>
-                  <span aria-hidden="true">{factStatusTone(status) === 'positive' ? '✓' : '!'}</span>
+                  <span aria-hidden="true">
+                    {factStatusTone(status) === 'positive' ? '✓' : '!'}
+                  </span>
                   {copy[labelKey] as string}
                 </span>
               </div>
               <h3>{humanizeFactValue(fact.value)}</h3>
               <dl>
-                <div><dt>{copy.factSource}</dt><dd>{fact.source.reference}</dd></div>
-                <div><dt>{copy.factScope}</dt><dd>{fact.scope.use.replaceAll('_', ' ')}</dd></div>
-                <div><dt>{copy.version}</dt><dd>{fact.version}</dd></div>
+                <div>
+                  <dt>{copy.factSource}</dt>
+                  <dd>{fact.source.reference}</dd>
+                </div>
+                <div>
+                  <dt>{copy.factScope}</dt>
+                  <dd>{fact.scope.use.replaceAll('_', ' ')}</dd>
+                </div>
+                <div>
+                  <dt>{copy.version}</dt>
+                  <dd>{fact.version}</dd>
+                </div>
               </dl>
               {fact.status === 'pending_confirmation' && !decisions[fact.id] && (
                 <div className={styles.cardActions}>
@@ -302,7 +389,9 @@ function FactConfirmation({
                       onAnnouncement(copy.factUpdated);
                     }}
                     type="button"
-                  >{copy.reject}</button>
+                  >
+                    {copy.reject}
+                  </button>
                   <button
                     className={styles.primaryButton}
                     disabled={!canEdit}
@@ -311,7 +400,9 @@ function FactConfirmation({
                       onAnnouncement(copy.factUpdated);
                     }}
                     type="button"
-                  >{copy.confirm}</button>
+                  >
+                    {copy.confirm}
+                  </button>
                 </div>
               )}
             </li>
@@ -337,27 +428,58 @@ function ResumeLibrary({
   return (
     <div>
       <div className={styles.contentTitle}>
-        <div><h2>{copy.resumeHeading}</h2><p>{copy.resumeHelp}</p></div>
-        <button className={styles.primaryButton} disabled={!canEdit} type="button">{copy.uploadResume}</button>
+        <div>
+          <h2>{copy.resumeHeading}</h2>
+          <p>{copy.resumeHelp}</p>
+        </div>
+        <button className={styles.primaryButton} disabled={!canEdit} type="button">
+          {copy.uploadResume}
+        </button>
       </div>
       {materials.length === 0 ? (
-        <div className={styles.inlineEmpty}><h3>{copy.resumeEmpty}</h3><button disabled={!canEdit} type="button">{copy.uploadResume}</button></div>
+        <div className={styles.inlineEmpty}>
+          <h3>{copy.resumeEmpty}</h3>
+          <button disabled={!canEdit} type="button">
+            {copy.uploadResume}
+          </button>
+        </div>
       ) : (
         <ul className={styles.resumeGrid}>
-          {materials.filter((material) => material.kind === 'resume').map((material) => (
-            <li className={styles.resumeCard} key={material.id}>
-              <div className={styles.documentIcon} aria-hidden="true"><span /></div>
-              <div>
-                <span className={styles.kind}>{materialLabel(material) === 'base' ? copy.baseResume : copy.tailoredResume}</span>
-                <h3>{materialLabel(material) === 'base' ? 'Product engineer — master' : 'Northstar — Frontend Engineer'}</h3>
-                <p>{copy.version} {material.version} · {material.fact_citations.length} {copy.citations}</p>
-                <p>{copy.updated} {formatter.format(new Date(material.updated_at))}</p>
-              </div>
-              <span className={`${styles.badge} ${material.status === 'approved' ? styles.positive : styles.warning}`}>
-                {copy[material.status === 'review_required' ? 'reviewRequired' : material.status] as string}
-              </span>
-            </li>
-          ))}
+          {materials
+            .filter((material) => material.kind === 'resume')
+            .map((material) => (
+              <li className={styles.resumeCard} key={material.id}>
+                <div className={styles.documentIcon} aria-hidden="true">
+                  <span />
+                </div>
+                <div>
+                  <span className={styles.kind}>
+                    {materialLabel(material) === 'base' ? copy.baseResume : copy.tailoredResume}
+                  </span>
+                  <h3>
+                    {materialLabel(material) === 'base'
+                      ? 'Product engineer — master'
+                      : 'Northstar — Frontend Engineer'}
+                  </h3>
+                  <p>
+                    {copy.version} {material.version} · {material.fact_citations.length}{' '}
+                    {copy.citations}
+                  </p>
+                  <p>
+                    {copy.updated} {formatter.format(new Date(material.updated_at))}
+                  </p>
+                </div>
+                <span
+                  className={`${styles.badge} ${material.status === 'approved' ? styles.positive : styles.warning}`}
+                >
+                  {
+                    copy[
+                      material.status === 'review_required' ? 'reviewRequired' : material.status
+                    ] as string
+                  }
+                </span>
+              </li>
+            ))}
         </ul>
       )}
     </div>
@@ -368,9 +490,22 @@ function ProfileLoading({ copy }: { copy: ProfileCopy }) {
   return (
     <main aria-busy="true" aria-label={copy.loading} className={styles.shell}>
       <span className={styles.srOnly}>{copy.loading}</span>
-      <div className={styles.skeletonHero}><i /><i /><i /></div>
-      <div className={styles.skeletonTabs}><i /><i /><i /></div>
-      <div className={styles.skeletonPanel}><i /><i /><i /><i /></div>
+      <div className={styles.skeletonHero}>
+        <i />
+        <i />
+        <i />
+      </div>
+      <div className={styles.skeletonTabs}>
+        <i />
+        <i />
+        <i />
+      </div>
+      <div className={styles.skeletonPanel}>
+        <i />
+        <i />
+        <i />
+        <i />
+      </div>
     </main>
   );
 }
@@ -379,9 +514,17 @@ function ProfileEmpty({ copy }: { copy: ProfileCopy }) {
   return (
     <main className={styles.shell}>
       <section className={styles.statePanel}>
-        <span className={styles.emptyMark} aria-hidden="true">＋</span>
-        <div><p className={styles.eyebrow}>{copy.eyebrow}</p><h1>{copy.emptyTitle}</h1><p>{copy.emptyBody}</p></div>
-        <button className={styles.primaryButton} type="button">{copy.start}</button>
+        <span className={styles.emptyMark} aria-hidden="true">
+          ＋
+        </span>
+        <div>
+          <p className={styles.eyebrow}>{copy.eyebrow}</p>
+          <h1>{copy.emptyTitle}</h1>
+          <p>{copy.emptyBody}</p>
+        </div>
+        <button className={styles.primaryButton} type="button">
+          {copy.start}
+        </button>
       </section>
     </main>
   );
@@ -391,9 +534,16 @@ function ProfilePermission({ copy }: { copy: ProfileCopy }) {
   return (
     <main className={styles.shell}>
       <section className={styles.statePanel}>
-        <span className={styles.stateIcon} aria-hidden="true">×</span>
-        <div><h1>{copy.permissionTitle}</h1><p>{copy.permissionBody}</p></div>
-        <a className={styles.secondaryButton} href="/">{copy.back}</a>
+        <span className={styles.stateIcon} aria-hidden="true">
+          ×
+        </span>
+        <div>
+          <h1>{copy.permissionTitle}</h1>
+          <p>{copy.permissionBody}</p>
+        </div>
+        <a className={styles.secondaryButton} href="/">
+          {copy.back}
+        </a>
       </section>
     </main>
   );

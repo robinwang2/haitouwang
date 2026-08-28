@@ -1,5 +1,6 @@
 export type JobSource = 'greenhouse' | 'lever' | 'company_careers' | 'manual_url';
-export type JobStatus = 'discovered' | 'normalized' | 'risk_review' | 'active' | 'expired' | 'removed';
+export type JobStatus =
+  'discovered' | 'normalized' | 'risk_review' | 'active' | 'expired' | 'removed';
 export type RiskLevel = 'low' | 'medium' | 'high' | 'unknown';
 
 export type Job = {
@@ -7,7 +8,15 @@ export type Job = {
   canonical_url: string;
   source: JobSource;
   source_refs: Array<{
-    type: 'user' | 'file' | 'greenhouse' | 'lever' | 'company_careers' | 'manual_url' | 'email' | 'system_rule';
+    type:
+      | 'user'
+      | 'file'
+      | 'greenhouse'
+      | 'lever'
+      | 'company_careers'
+      | 'manual_url'
+      | 'email'
+      | 'system_rule';
     reference: string;
     captured_at?: string;
     content_hash?: string;
@@ -15,7 +24,8 @@ export type Job = {
   title: string;
   company: string;
   location: string;
-  employment_type: 'full_time' | 'part_time' | 'contract' | 'internship' | 'temporary' | 'other' | 'unknown';
+  employment_type:
+    'full_time' | 'part_time' | 'contract' | 'internship' | 'temporary' | 'other' | 'unknown';
   description_status: 'complete' | 'partial' | 'missing';
   risk: {
     level: RiskLevel;
@@ -29,14 +39,28 @@ export type Job = {
 };
 
 export type ScoreDimension = {
-  name: 'skills' | 'experience' | 'work_authorization' | 'location' | 'salary' | 'employment_type' | 'preference';
+  name:
+    | 'skills'
+    | 'experience'
+    | 'work_authorization'
+    | 'location'
+    | 'salary'
+    | 'employment_type'
+    | 'preference';
   weight: 5 | 10 | 15 | 20 | 25;
   score: number;
   evidence_paths: string[];
 };
 
 export type HardGate = {
-  name: 'work_authorization' | 'blacklist' | 'duplicate' | 'location' | 'salary' | 'employment_type' | 'risk';
+  name:
+    | 'work_authorization'
+    | 'blacklist'
+    | 'duplicate'
+    | 'location'
+    | 'salary'
+    | 'employment_type'
+    | 'risk';
   result: 'pass' | 'block' | 'manual';
   evidence_paths: string[];
 };

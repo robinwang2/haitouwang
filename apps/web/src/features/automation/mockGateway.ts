@@ -42,7 +42,11 @@ function changedFields(change: AutomationChange): readonly string[] {
     case 'capability':
       return [`capabilities.${change.capability}`];
     case 'limits':
-      return ['limits.dailyApplications', 'limits.perCompanyApplications', 'limits.concurrentTasks'];
+      return [
+        'limits.dailyApplications',
+        'limits.perCompanyApplications',
+        'limits.concurrentTasks',
+      ];
     case 'pause':
     case 'resume':
       return ['pause'];

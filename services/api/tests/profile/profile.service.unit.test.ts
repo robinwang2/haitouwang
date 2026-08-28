@@ -50,10 +50,10 @@ describe('ProfileService goals', () => {
     const second = await createGoal(service, userId, context, 'Platform');
     await createGoal(service, otherUserId, () => context(otherUserId), 'Other tenant');
 
-    deepEqual(
-      (await service.listGoals(userId)).map((goal) => goal.name).sort(),
-      ['Backend', 'Platform'],
-    );
+    deepEqual((await service.listGoals(userId)).map((goal) => goal.name).sort(), [
+      'Backend',
+      'Platform',
+    ]);
     await rejects(
       service.getGoal(otherUserId, first.id),
       (error: unknown) =>
@@ -142,7 +142,11 @@ describe('ProfileService facts', () => {
       value: { name: 'TypeScript' },
       source: { type: 'user' as const, reference: 'profile-form' },
     };
-    const pending = await service.createFact(userId, { ...base, scope: { use: 'all_goals' } }, context());
+    const pending = await service.createFact(
+      userId,
+      { ...base, scope: { use: 'all_goals' } },
+      context(),
+    );
     const timeRestricted = await service.createFact(
       userId,
       {
@@ -295,7 +299,13 @@ describe('ProfileService resume files, export and deletion', () => {
       context(),
     );
     equal((await service.listUsableResumeFiles(userId)).length, 0);
-    const clean = await service.updateFileScanStatus(userId, file.id, file.version, 'clean', context());
+    const clean = await service.updateFileScanStatus(
+      userId,
+      file.id,
+      file.version,
+      'clean',
+      context(),
+    );
     equal((await service.listUsableResumeFiles(userId))[0]?.id, file.id);
     const quarantined = await service.updateFileScanStatus(
       userId,

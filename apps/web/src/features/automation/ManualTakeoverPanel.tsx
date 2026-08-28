@@ -60,9 +60,7 @@ export function ManualTakeoverPanel({
       const loaded = await gateway.listTakeoverTasks();
       setTasks(loaded);
       setSelectedId((current) =>
-        current && loaded.some((task) => task.id === current)
-          ? current
-          : (loaded[0]?.id ?? null),
+        current && loaded.some((task) => task.id === current) ? current : (loaded[0]?.id ?? null),
       );
     } catch {
       setError('人工任务包加载失败。自动化继续保持暂停，请稍后重试。');
@@ -110,18 +108,29 @@ export function ManualTakeoverPanel({
       <div className={styles.panelHeader}>
         <div>
           <p className={styles.eyebrow}>Human takeover</p>
-          <h2 className={styles.title} id="takeover-title">人工接管</h2>
+          <h2 className={styles.title} id="takeover-title">
+            人工接管
+          </h2>
           <p className={styles.subtitle}>
             自动化遇到未知、敏感或无法验证的步骤时立即暂停，不静默重试。
           </p>
         </div>
         <span className={`${styles.statusPill} ${gateway.kind === 'mock' ? styles.mockPill : ''}`}>
-          {tasks.filter((task) => task.status === 'open' || task.status === 'still_blocked').length} 项待处理
+          {tasks.filter((task) => task.status === 'open' || task.status === 'still_blocked').length}{' '}
+          项待处理
         </span>
       </div>
 
-      {error ? <div className={styles.error} role="alert">{error}</div> : null}
-      {message ? <div className={styles.success} role="status">{message}</div> : null}
+      {error ? (
+        <div className={styles.error} role="alert">
+          {error}
+        </div>
+      ) : null}
+      {message ? (
+        <div className={styles.success} role="status">
+          {message}
+        </div>
+      ) : null}
 
       {loading ? (
         <>
@@ -145,7 +154,9 @@ export function ManualTakeoverPanel({
               >
                 <strong>{task.company}</strong>
                 <span>{task.jobTitle}</span>
-                <span>{MANUAL_REASON_LABELS[task.reason]} · {task.status}</span>
+                <span>
+                  {MANUAL_REASON_LABELS[task.reason]} · {task.status}
+                </span>
               </button>
             ))}
           </nav>
@@ -155,7 +166,9 @@ export function ManualTakeoverPanel({
               <div className={styles.detailHeader}>
                 <div>
                   <h3>{selected.jobTitle}</h3>
-                  <p>{selected.company} · 预计 {selected.estimatedMinutes} 分钟</p>
+                  <p>
+                    {selected.company} · 预计 {selected.estimatedMinutes} 分钟
+                  </p>
                 </div>
                 <a
                   className={styles.secondaryButton}
@@ -169,7 +182,8 @@ export function ManualTakeoverPanel({
 
               {selected.mayHaveSubmitted || selected.reason === 'submission_result_uncertain' ? (
                 <div className={styles.riskBanner} role="alert">
-                  <strong>不要重复提交。</strong> 当前无法确认招聘网站是否已收到申请，必须先核对结果。
+                  <strong>不要重复提交。</strong>{' '}
+                  当前无法确认招聘网站是否已收到申请，必须先核对结果。
                 </div>
               ) : null}
 

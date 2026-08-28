@@ -34,7 +34,11 @@ export const mockJobs: Job[] = [
     location: 'Remote · US',
     employment_type: 'full_time',
     description_status: 'complete',
-    risk: { level: 'medium', reasons: ['work_authorization_unknown'], requires_manual_review: true },
+    risk: {
+      level: 'medium',
+      reasons: ['work_authorization_unknown'],
+      requires_manual_review: true,
+    },
     status: 'risk_review',
     version: 1,
     created_at: '2026-07-30T09:20:00Z',
@@ -50,7 +54,11 @@ export const mockJobs: Job[] = [
     location: 'San Francisco, CA · On-site',
     employment_type: 'full_time',
     description_status: 'partial',
-    risk: { level: 'high', reasons: ['location_rule_blocked', 'description_partial'], requires_manual_review: true },
+    risk: {
+      level: 'high',
+      reasons: ['location_rule_blocked', 'description_partial'],
+      requires_manual_review: true,
+    },
     status: 'active',
     version: 2,
     created_at: '2026-07-29T19:10:00Z',
@@ -58,7 +66,15 @@ export const mockJobs: Job[] = [
   },
 ];
 
-const passGateNames = ['work_authorization', 'blacklist', 'duplicate', 'location', 'salary', 'employment_type', 'risk'] as const;
+const passGateNames = [
+  'work_authorization',
+  'blacklist',
+  'duplicate',
+  'location',
+  'salary',
+  'employment_type',
+  'risk',
+] as const;
 const dimensionSeed = [
   ['skills', 25, 92],
   ['experience', 20, 88],
@@ -76,8 +92,17 @@ export const mockScores: Score[] = [
     goal_id: goalId,
     job_id: mockJobs[0].id,
     total: 89,
-    dimensions: dimensionSeed.map(([name, weight, score]) => ({ name, weight, score, evidence_paths: [`/facts/${name}`] })),
-    hard_gates: passGateNames.map((name) => ({ name, result: 'pass', evidence_paths: [`/jobs/0/${name}`] })),
+    dimensions: dimensionSeed.map(([name, weight, score]) => ({
+      name,
+      weight,
+      score,
+      evidence_paths: [`/facts/${name}`],
+    })),
+    hard_gates: passGateNames.map((name) => ({
+      name,
+      result: 'pass',
+      evidence_paths: [`/jobs/0/${name}`],
+    })),
     decision: 'eligible',
     explanations: [
       'Strong TypeScript and design-system evidence aligns with the core requirements.',

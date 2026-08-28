@@ -1,4 +1,4 @@
-import { Pool, type PoolClient, type QueryResultRow } from 'pg';
+import type { Pool, PoolClient, QueryResultRow } from 'pg';
 
 import type { JobListFilter, JobStore } from './job-store.interface';
 import type {

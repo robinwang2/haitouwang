@@ -75,7 +75,9 @@ describe.skipIf(!DATABASE_URL)('PostgresProfileStore integration', () => {
   it('round-trips a goal and enforces user_id scoping in SQL', async () => {
     const userId = randomUUID();
     const otherUserId = randomUUID();
-    const goal = goalFixture(userId, { salary: { currency: 'USD', minimum: 100_000, period: 'year' } });
+    const goal = goalFixture(userId, {
+      salary: { currency: 'USD', minimum: 100_000, period: 'year' },
+    });
 
     await store.saveGoal(userId, goal);
 
@@ -102,7 +104,9 @@ describe.skipIf(!DATABASE_URL)('PostgresProfileStore integration', () => {
       snapshot: goal,
     };
     await store.appendGoalVersion(userId, version);
-    expect((await store.listGoalVersions(userId, goal.id)).map((row) => row.snapshot.id)).toEqual([goal.id]);
+    expect((await store.listGoalVersions(userId, goal.id)).map((row) => row.snapshot.id)).toEqual([
+      goal.id,
+    ]);
     expect(await store.listGoalVersions(randomUUID(), goal.id)).toEqual([]);
 
     const event: AuditEvent = {
@@ -118,7 +122,9 @@ describe.skipIf(!DATABASE_URL)('PostgresProfileStore integration', () => {
       changed_fields: ['name'],
     };
     await store.appendAuditEvent(userId, event);
-    expect((await store.listAuditEvents(userId)).map((row) => row.event_id)).toEqual([event.event_id]);
+    expect((await store.listAuditEvents(userId)).map((row) => row.event_id)).toEqual([
+      event.event_id,
+    ]);
     expect(await store.listAuditEvents(randomUUID())).toEqual([]);
 
     await store.saveIdempotency(userId, 'createGoal', 'integration-test-key-000001', {
@@ -127,16 +133,22 @@ describe.skipIf(!DATABASE_URL)('PostgresProfileStore integration', () => {
       audit_event_id: event.event_id,
       resource_id: goal.id,
     });
-    expect(await store.getIdempotency(userId, 'createGoal', 'integration-test-key-000001')).toEqual({
-      request_hash: 'hash',
-      response: { id: goal.id },
-      audit_event_id: event.event_id,
-      resource_id: goal.id,
-    });
-    expect(await store.getIdempotency(randomUUID(), 'createGoal', 'integration-test-key-000001')).toBeUndefined();
+    expect(await store.getIdempotency(userId, 'createGoal', 'integration-test-key-000001')).toEqual(
+      {
+        request_hash: 'hash',
+        response: { id: goal.id },
+        audit_event_id: event.event_id,
+        resource_id: goal.id,
+      },
+    );
+    expect(
+      await store.getIdempotency(randomUUID(), 'createGoal', 'integration-test-key-000001'),
+    ).toBeUndefined();
 
     await store.deleteIdempotencyForResource(userId, goal.id);
-    expect(await store.getIdempotency(userId, 'createGoal', 'integration-test-key-000001')).toBeUndefined();
+    expect(
+      await store.getIdempotency(userId, 'createGoal', 'integration-test-key-000001'),
+    ).toBeUndefined();
   });
 
   it('rolls back all writes when the transaction callback throws', async () => {

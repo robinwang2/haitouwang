@@ -4,8 +4,7 @@
   --line: #dbe1e8;
   --canvas: #f3f6f7;
   background:
-    radial-gradient(circle at 92% 2%, rgb(40 132 92 / 12%), transparent 31%),
-    var(--canvas);
+    radial-gradient(circle at 92% 2%, rgb(40 132 92 / 12%), transparent 31%), var(--canvas);
   color: var(--ink);
   min-height: 100%;
   padding: 34px;
