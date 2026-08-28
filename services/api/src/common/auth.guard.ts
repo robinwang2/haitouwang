@@ -1,4 +1,5 @@
-import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import type { CanActivate, ExecutionContext } from '@nestjs/common';
 
 import { AuthError, AuthService } from '../auth.service';
 import type { AuthenticatedPrincipal } from '../auth.service';
