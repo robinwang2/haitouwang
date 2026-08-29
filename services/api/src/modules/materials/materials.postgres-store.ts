@@ -242,6 +242,36 @@ export class PostgresMaterialsStore implements MaterialsStore {
     );
   }
 
+  async appendRejectedAuditEvent(
+    actorUserId: string | undefined,
+    materialId: string,
+    event: Omit<MaterialAuditEvent, 'user_id' | 'actor' | 'material_id' | 'material_version'>,
+  ): Promise<void> {
+    await this.executor.query(
+      `INSERT INTO materials_audit_events (
+         event_id, user_id, material_id, material_version, action, occurred_at, actor,
+         changed_fields, outcome, reason_code
+       )
+       SELECT $1, current.user_id, current.material_id, current.version, $2, $3, $4, $5, $6, $7
+       FROM materials_versions AS current
+       WHERE current.material_id = $8
+       ORDER BY current.version DESC
+       LIMIT 1`,
+      [
+        event.event_id,
+        event.action,
+        event.occurred_at,
+        JSON.stringify(
+          actorUserId ? { type: 'user', id: actorUserId } : { type: 'system', id: 'anonymous' },
+        ),
+        event.changed_fields,
+        event.outcome ?? null,
+        event.reason_code ?? null,
+        materialId,
+      ],
+    );
+  }
+
   async listAuditEvents(userId: string): Promise<MaterialAuditEvent[]> {
     const { rows } = await this.executor.query<AuditRow>(
       'SELECT * FROM materials_audit_events WHERE user_id = $1 ORDER BY occurred_at, event_id',

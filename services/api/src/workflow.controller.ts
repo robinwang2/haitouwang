@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto';
 
 import { MaterialsError, MaterialsService } from './modules/materials';
 import type { Fact } from './modules/profile';
+import { ReviewService } from './modules/review';
 import { AuthError, AuthService, type AuthenticatedPrincipal } from './auth.service';
 
 interface ApproveMaterialBody {
@@ -35,44 +36,44 @@ export class WorkflowController {
     private readonly auth: AuthService,
     @Inject(MaterialsService)
     private readonly materials: MaterialsService,
+    @Inject(ReviewService)
+    private readonly reviews: ReviewService,
   ) {}
 
   @Get('reviews/:reviewId')
-  public getReview(
+  public async getReview(
     @Headers('authorization') authorization: string | undefined,
     @Param('reviewId') reviewId: string,
   ) {
     const principal = this.requirePrincipal(authorization);
-    return this.execute(() => this.materials.getReview(principal.userId, reviewId));
+    return this.execute(() => this.reviews.get(principal.userId, reviewId));
   }
 
   @Post('reviews/:reviewId/findings/:findingId/resolve')
   @HttpCode(200)
-  public resolveFinding(
+  public async resolveFinding(
     @Headers('authorization') authorization: string | undefined,
     @Param('reviewId') reviewId: string,
     @Param('findingId') findingId: string,
   ) {
     const principal = this.requirePrincipal(authorization);
-    this.requirePermission(principal, 'material:approve');
-    return this.execute(() =>
-      this.materials.resolveReviewFinding(principal.userId, reviewId, findingId),
-    );
+    await this.requirePermission(principal, 'material:approve');
+    return this.execute(() => this.reviews.resolveFinding(principal.userId, reviewId, findingId));
   }
 
   @Post('materials/:materialId/approve')
   @HttpCode(200)
-  public approveMaterial(
+  public async approveMaterial(
     @Headers('authorization') authorization: string | undefined,
     @Param('materialId') materialId: string,
     @Body() unvalidatedBody: unknown,
   ) {
-    const principal = this.authenticateForMaterial(authorization, materialId, 'approval');
-    this.requirePermission(principal, 'material:approve', materialId);
-    const body = this.validateApprovalBody(unvalidatedBody, principal.userId, materialId);
-    return this.execute(() =>
+    const principal = await this.authenticateForMaterial(authorization, materialId, 'approval');
+    await this.requirePermission(principal, 'material:approve', materialId);
+    const body = await this.validateApprovalBody(unvalidatedBody, principal.userId, materialId);
+    return this.execute(async () =>
       toContractMaterial(
-        this.materials.approve(
+        await this.materials.approve(
           principal.userId,
           materialId,
           body.expected_version,
@@ -87,26 +88,26 @@ export class WorkflowController {
 
   @Post('materials/:materialId/reject')
   @HttpCode(200)
-  public rejectMaterial(
+  public async rejectMaterial(
     @Headers('authorization') authorization: string | undefined,
     @Param('materialId') materialId: string,
     @Body() unvalidatedBody: unknown,
   ) {
-    const principal = this.authenticateForMaterial(authorization, materialId, 'rejection');
+    const principal = await this.authenticateForMaterial(authorization, materialId, 'rejection');
     if (!principal.permissions.includes('material:approve')) {
-      this.materials.recordRejectionGateFailure(principal.userId, materialId, 'FORBIDDEN');
+      await this.materials.recordRejectionGateFailure(principal.userId, materialId, 'FORBIDDEN');
       throw httpError(403, 'FORBIDDEN', 'The authenticated principal cannot reject materials.');
     }
-    const body = this.validateRejectionBody(unvalidatedBody, principal.userId, materialId);
-    return this.execute(() =>
+    const body = await this.validateRejectionBody(unvalidatedBody, principal.userId, materialId);
+    return this.execute(async () =>
       toContractMaterial(
-        this.materials.reject(principal.userId, materialId, body.expected_version),
+        await this.materials.reject(principal.userId, materialId, body.expected_version),
       ),
     );
   }
 
   @Get('audit-events')
-  public listAudit(
+  public async listAudit(
     @Headers('authorization') authorization: string | undefined,
     @Query('resource_id') resourceId?: string,
     @Query('cursor') cursor?: string,
@@ -117,9 +118,9 @@ export class WorkflowController {
     if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
       throw httpError(400, 'VALIDATION_FAILED', 'page_size must be an integer from 1 to 100.');
     }
-    const available = this.materials
-      .getAuditEvents(principal.userId)
-      .filter((event) => resourceId === undefined || event.material_id === resourceId);
+    const available = (await this.materials.getAuditEvents(principal.userId)).filter(
+      (event) => resourceId === undefined || event.material_id === resourceId,
+    );
     const cursorIndex = cursor ? available.findIndex((event) => event.event_id === cursor) : -1;
     if (cursor && cursorIndex < 0) {
       throw httpError(400, 'VALIDATION_FAILED', 'cursor is invalid for this audit result set.');
@@ -163,11 +164,11 @@ export class WorkflowController {
     }
   }
 
-  private authenticateForMaterial(
+  private async authenticateForMaterial(
     authorization: string | undefined,
     materialId: string,
     operation: 'approval' | 'rejection',
-  ): AuthenticatedPrincipal {
+  ): Promise<AuthenticatedPrincipal> {
     try {
       return this.auth.authenticate(authorization);
     } catch (error) {
@@ -176,53 +177,53 @@ export class WorkflowController {
         operation === 'approval'
           ? this.materials.recordApprovalGateFailure.bind(this.materials)
           : this.materials.recordRejectionGateFailure.bind(this.materials);
-      record(undefined, materialId, error.code);
+      await record(undefined, materialId, error.code);
       throw httpError(error.code === 'FORBIDDEN' ? 403 : 401, error.code, error.message);
     }
   }
 
-  private validateApprovalBody(
+  private async validateApprovalBody(
     value: unknown,
     userId: string,
     materialId: string,
-  ): ApproveMaterialBody {
+  ): Promise<ApproveMaterialBody> {
     try {
       return validateApproveMaterialBody(value);
     } catch (error) {
-      this.materials.recordApprovalGateFailure(userId, materialId, 'VALIDATION_FAILED');
+      await this.materials.recordApprovalGateFailure(userId, materialId, 'VALIDATION_FAILED');
       throw error;
     }
   }
 
-  private validateRejectionBody(
+  private async validateRejectionBody(
     value: unknown,
     userId: string,
     materialId: string,
-  ): RejectMaterialBody {
+  ): Promise<RejectMaterialBody> {
     try {
       return validateRejectMaterialBody(value);
     } catch (error) {
-      this.materials.recordRejectionGateFailure(userId, materialId, 'VALIDATION_FAILED');
+      await this.materials.recordRejectionGateFailure(userId, materialId, 'VALIDATION_FAILED');
       throw error;
     }
   }
 
-  private requirePermission(
+  private async requirePermission(
     principal: AuthenticatedPrincipal,
     permission: string,
     resourceId?: string,
-  ): void {
+  ): Promise<void> {
     if (!principal.permissions.includes(permission)) {
       if (resourceId) {
-        this.materials.recordApprovalGateFailure(principal.userId, resourceId, 'FORBIDDEN');
+        await this.materials.recordApprovalGateFailure(principal.userId, resourceId, 'FORBIDDEN');
       }
       throw httpError(403, 'FORBIDDEN', 'The authenticated principal cannot approve materials.');
     }
   }
 
-  private execute<T>(operation: () => T): T {
+  private async execute<T>(operation: () => T | Promise<T>): Promise<T> {
     try {
-      return operation();
+      return await operation();
     } catch (error) {
       if (!(error instanceof MaterialsError)) throw error;
       const status =
@@ -303,7 +304,7 @@ function publicErrorCode(code: MaterialsError['code']): string {
   return code;
 }
 
-function toContractMaterial(material: ReturnType<MaterialsService['get']>) {
+function toContractMaterial(material: Awaited<ReturnType<MaterialsService['get']>>) {
   return {
     id: material.id,
     user_id: material.user_id,

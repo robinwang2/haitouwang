@@ -3,6 +3,12 @@ import { Injectable } from '@nestjs/common';
 import type { MaterialsStore } from './materials-store.interface';
 import type { Material, MaterialAuditEvent } from './materials.types';
 
+export type MaterialsWriteKind = 'material' | 'audit';
+export type MaterialsWriteObserver = (
+  kind: MaterialsWriteKind,
+  value: Material | MaterialAuditEvent,
+) => void;
+
 function clone<T>(value: T): T {
   return structuredClone(value);
 }
@@ -14,10 +20,21 @@ function versionKey(materialId: string, version: number): string {
 @Injectable()
 export class InMemoryMaterialsStore implements MaterialsStore {
   private readonly versions = new Map<string, Material>();
-  private readonly auditEvents: MaterialAuditEvent[] = [];
+  private auditEvents: MaterialAuditEvent[] = [];
+
+  public constructor(private readonly beforeWrite: MaterialsWriteObserver = () => undefined) {}
 
   async withTransaction<T>(operation: (store: MaterialsStore) => Promise<T>): Promise<T> {
-    return operation(this);
+    const versions = new Map([...this.versions].map(([key, value]) => [key, clone(value)]));
+    const auditEvents = this.auditEvents.map(clone);
+    try {
+      return await operation(this);
+    } catch (error) {
+      this.versions.clear();
+      for (const [key, value] of versions) this.versions.set(key, value);
+      this.auditEvents = auditEvents;
+      throw error;
+    }
   }
 
   async hasMaterial(userId: string, materialId: string): Promise<boolean> {
@@ -35,6 +52,7 @@ export class InMemoryMaterialsStore implements MaterialsStore {
     if (this.versions.has(key)) {
       throw new Error(`Material version already exists: ${key}`);
     }
+    this.beforeWrite('material', material);
     this.versions.set(key, clone(material));
   }
 
@@ -76,7 +94,24 @@ export class InMemoryMaterialsStore implements MaterialsStore {
     if (event.user_id !== userId) {
       throw new Error('Materials store tenant mismatch.');
     }
+    this.beforeWrite('audit', event);
     this.auditEvents.push(clone(event));
+  }
+
+  async appendRejectedAuditEvent(
+    actorUserId: string | undefined,
+    materialId: string,
+    event: Omit<MaterialAuditEvent, 'user_id' | 'actor' | 'material_id' | 'material_version'>,
+  ): Promise<void> {
+    const material = this.currentMaterialById(materialId);
+    if (!material) return;
+    await this.appendAuditEvent(material.user_id, {
+      ...clone(event),
+      user_id: material.user_id,
+      actor: actorUserId ? { type: 'user', id: actorUserId } : { type: 'system', id: 'anonymous' },
+      material_id: materialId,
+      material_version: material.version,
+    });
   }
 
   async listAuditEvents(userId: string): Promise<MaterialAuditEvent[]> {
@@ -87,5 +122,11 @@ export class InMemoryMaterialsStore implements MaterialsStore {
     return [...this.versions.values()]
       .filter((material) => material.id === materialId && material.user_id === userId)
       .sort((left, right) => left.version - right.version);
+  }
+
+  private currentMaterialById(materialId: string): Material | undefined {
+    return [...this.versions.values()]
+      .filter((material) => material.id === materialId)
+      .sort((left, right) => right.version - left.version)[0];
   }
 }

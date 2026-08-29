@@ -6,7 +6,6 @@ export * from './materials.generator';
 export * from './materials.module';
 export * from './materials.policy';
 export * from './materials.postgres-store';
-export * from './materials.repository';
 export * from './materials.service';
 export * from './materials.store';
 export * from './materials.types';

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MaterialsError,
   MaterialsService,
+  InMemoryMaterialsStore,
   exportMaterial,
   generateMaterialDraft,
   selectBaseResume,
@@ -10,6 +11,7 @@ import {
 } from '../../src/modules/materials';
 import type { Fact, FileMetadata } from '../../src/modules/profile';
 import type { Material } from '../../src/modules/materials';
+import { InMemoryReviewStore, ReviewService } from '../../src/modules/review';
 
 import { GOAL_ID, NOW, USER_ID, fact, materialFacts } from './fixtures/material-facts';
 
@@ -68,10 +70,10 @@ describe('material formatting, versions and lifecycle', () => {
     );
   });
 
-  it('creates reproducible versions and line/claim differences', () => {
+  it('creates reproducible versions and line/claim differences', async () => {
     const service = deterministicService();
     const firstFacts = materialFacts();
-    const first = service.generate(generationInput(firstFacts));
+    const first = await service.generate(generationInput(firstFacts));
     const secondFacts = firstFacts.map((item) =>
       item.kind === 'summary'
         ? {
@@ -81,16 +83,18 @@ describe('material formatting, versions and lifecycle', () => {
           }
         : item,
     );
-    const second = service.revise(USER_ID, first.id, first.version, {
+    const second = await service.revise(USER_ID, first.id, first.version, {
       goal_id: GOAL_ID,
       facts: secondFacts,
       evaluated_at: NOW,
     });
 
-    expect(service.getVersions(USER_ID, first.id).map((item) => item.version)).toEqual([1, 2]);
-    expect(service.get(USER_ID, first.id, 1)).toEqual(first);
-    const left = service.diff(USER_ID, first.id, 1, second.id, 2);
-    const right = service.diff(USER_ID, first.id, 1, second.id, 2);
+    expect((await service.getVersions(USER_ID, first.id)).map((item) => item.version)).toEqual([
+      1, 2,
+    ]);
+    expect(await service.get(USER_ID, first.id, 1)).toEqual(first);
+    const left = await service.diff(USER_ID, first.id, 1, second.id, 2);
+    const right = await service.diff(USER_ID, first.id, 1, second.id, 2);
     expect(left).toEqual(right);
     expect(left.added_claim_ids).toHaveLength(1);
     expect(left.removed_claim_ids).toHaveLength(1);
@@ -98,29 +102,29 @@ describe('material formatting, versions and lifecycle', () => {
     expect(left.lines.some((line) => line.operation === 'insert')).toBe(true);
   });
 
-  it('revalidates fact versions at approval and never mutates an approved version in place', () => {
+  it('revalidates fact versions at approval and never mutates an approved version in place', async () => {
     const service = deterministicService();
     const facts = materialFacts();
-    const draft = service.generate(generationInput(facts));
+    const draft = await service.generate(generationInput(facts));
     const changedFacts = facts.map((item) =>
       item.kind === 'education' ? { ...item, version: 2 } : item,
     );
 
-    expect(() => approveMaterial(service, draft, changedFacts)).toThrowError(
+    await expect(approveMaterial(service, draft, changedFacts)).rejects.toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({
         code: 'MATERIAL_NOT_PUBLISHABLE',
       }),
     );
 
-    const approved = approveMaterial(service, draft, facts);
-    const replacement = service.revise(USER_ID, approved.id, approved.version, {
+    const approved = await approveMaterial(service, draft, facts);
+    const replacement = await service.revise(USER_ID, approved.id, approved.version, {
       goal_id: GOAL_ID,
       facts,
       evaluated_at: NOW,
     });
 
     expect(approved).toMatchObject({ status: 'approved', version: 2 });
-    expect(service.get(USER_ID, approved.id)).toMatchObject({
+    expect(await service.get(USER_ID, approved.id)).toMatchObject({
       status: 'superseded',
       version: 3,
     });
@@ -132,19 +136,19 @@ describe('material formatting, versions and lifecycle', () => {
     expect(replacement.id).not.toBe(approved.id);
   });
 
-  it('blocks pending material approval and cross-tenant reads', () => {
+  it('blocks pending material approval and cross-tenant reads', async () => {
     const service = deterministicService();
-    const pending = service.generate({
+    const pending = await service.generate({
       ...generationInput(materialFacts()),
       pending_claims: [{ text: 'Unconfirmed claim' }],
     });
 
-    expect(() => approveMaterial(service, pending, materialFacts())).toThrowError(
+    await expect(approveMaterial(service, pending, materialFacts())).rejects.toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({
         code: 'MATERIAL_NOT_PUBLISHABLE',
       }),
     );
-    expect(() => service.get('another-user', pending.id)).toThrowError(
+    await expect(service.get('another-user', pending.id)).rejects.toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({ code: 'RESOURCE_NOT_FOUND' }),
     );
   });
@@ -164,15 +168,15 @@ describe('material base resume and exports', () => {
     expect(() => selectBaseResume(USER_ID, files, 'file-pending')).toThrow(MaterialsError);
   });
 
-  it('exports approved text, DOCX and PDF as deterministic parseable payloads', () => {
+  it('exports approved text, DOCX and PDF as deterministic parseable payloads', async () => {
     const service = deterministicService();
     const facts = materialFacts();
-    const draft = service.generate(generationInput(facts));
-    const approved = approveMaterial(service, draft, facts);
+    const draft = await service.generate(generationInput(facts));
+    const approved = await approveMaterial(service, draft, facts);
 
-    const text = service.export(USER_ID, approved.id, approved.version, 'text');
-    const docx = service.export(USER_ID, approved.id, approved.version, 'docx');
-    const pdf = service.export(USER_ID, approved.id, approved.version, 'pdf');
+    const text = await service.export(USER_ID, approved.id, approved.version, 'text');
+    const docx = await service.export(USER_ID, approved.id, approved.version, 'docx');
+    const pdf = await service.export(USER_ID, approved.id, approved.version, 'pdf');
 
     expect(Buffer.from(text.bytes).toString('utf8')).toBe(approved.document.plain_text);
     expect(Buffer.from(docx.bytes).subarray(0, 4).toString('hex')).toBe('504b0304');
@@ -187,14 +191,14 @@ describe('material base resume and exports', () => {
     expect(exportMaterial(approved, 'docx').bytes).toEqual(exportMaterial(approved, 'docx').bytes);
   });
 
-  it('preserves Unicode facts and all claims across multi-page PDF output', () => {
+  it('preserves Unicode facts and all claims across multi-page PDF output', async () => {
     const service = deterministicService();
     const facts = Array.from({ length: 35 }, (_, index) =>
       fact(index + 1, 'skill', { 技能名称: `分布式技能${index}` }),
     );
-    const draft = service.generate(generationInput(facts));
-    const approved = approveMaterial(service, draft, facts);
-    const pdf = service.export(USER_ID, approved.id, approved.version, 'pdf');
+    const draft = await service.generate(generationInput(facts));
+    const approved = await approveMaterial(service, draft, facts);
+    const pdf = await service.export(USER_ID, approved.id, approved.version, 'pdf');
     const body = Buffer.from(pdf.bytes).toString('binary');
 
     expect(body).toContain('/Count 2');
@@ -202,10 +206,10 @@ describe('material base resume and exports', () => {
     expect(body).toContain('/ToUnicode');
   });
 
-  it('does not export a draft or a material with blocking checks', () => {
+  it('does not export a draft or a material with blocking checks', async () => {
     const service = deterministicService();
-    const draft = service.generate(generationInput(materialFacts()));
-    expect(() => service.export(USER_ID, draft.id, draft.version, 'text')).toThrowError(
+    const draft = await service.generate(generationInput(materialFacts()));
+    await expect(service.export(USER_ID, draft.id, draft.version, 'text')).rejects.toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({
         code: 'MATERIAL_NOT_PUBLISHABLE',
       }),
@@ -224,16 +228,16 @@ function generationInput(facts: readonly Fact[]) {
   };
 }
 
-function approveMaterial(
+async function approveMaterial(
   service: MaterialsService,
   material: Material,
   facts: readonly Fact[],
-): Material {
-  let review = service
-    .listReviews(USER_ID)
-    .find((candidate) => candidate.material_ids.includes(material.id));
+): Promise<Material> {
+  let review = (await service.listReviews(USER_ID)).find((candidate) =>
+    candidate.material_ids.includes(material.id),
+  );
   if (!review) {
-    review = service.saveReview({
+    review = await service.saveReview({
       id: `80000000-0000-4000-8000-${material.id.slice(-12)}`,
       user_id: USER_ID,
       job_id: material.job_id!,
@@ -255,7 +259,10 @@ function approveMaterial(
 function deterministicService(): MaterialsService {
   let id = 0;
   let tick = 0;
+  const reviews = new ReviewService(new InMemoryReviewStore());
   return new MaterialsService(
+    new InMemoryMaterialsStore(),
+    reviews,
     () => new Date(Date.parse(NOW) + tick++ * 1000).toISOString(),
     () => `90000000-0000-4000-8000-${(++id).toString().padStart(12, '0')}`,
   );

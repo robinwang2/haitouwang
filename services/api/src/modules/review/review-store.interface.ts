@@ -4,10 +4,7 @@ export const REVIEW_STORE = Symbol('REVIEW_STORE');
 
 /**
  * Persistence boundary for the Review aggregate. Every operation is tenant-scoped by
- * user_id. This models the durable replacement for the review records that today live
- * inside MaterialsRepository's `reviews` table; materials.service.ts is unaffected by
- * this ticket and keeps using MaterialsRepository directly (see materials-store.interface.ts
- * for why: it must stay synchronous to match the still-synchronous WorkflowController).
+ * user_id.
  */
 export interface ReviewStore {
   withTransaction<T>(operation: (store: ReviewStore) => Promise<T>): Promise<T>;
