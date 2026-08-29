@@ -83,9 +83,12 @@ function mapAudit(row: AuditRow): MaterialAuditEvent {
 /**
  * Postgres-backed implementation of MaterialsStore. Every statement scopes its WHERE
  * clause by user_id; row-level tenant isolation is enforced in SQL. Fact citations are
- * additionally normalized into materials_fact_citations, whose foreign key to
- * materials_versions(material_id, version) guarantees a citation can never outlive (or
- * precede) the material version it was written against.
+ * additionally normalized into materials_fact_citations, whose foreign keys guarantee both
+ * that a citation can never outlive (or precede) the material version it was written
+ * against (materials_versions(material_id, version)) and that it only ever points at a
+ * fact version that actually exists (profile_fact_versions(resource_id, version)).
+ * saveMaterial runs its multi-statement write in its own transaction when called directly
+ * on the pool, so a rejected citation cannot leave a dangling materials_versions row.
  */
 export class PostgresMaterialsStore implements MaterialsStore {
   constructor(
@@ -120,6 +123,10 @@ export class PostgresMaterialsStore implements MaterialsStore {
   async saveMaterial(userId: string, material: Material): Promise<void> {
     if (material.user_id !== userId) {
       throw new Error('Materials store tenant mismatch.');
+    }
+    if (this.executor === this.pool) {
+      await this.withTransaction((scoped) => scoped.saveMaterial(userId, material));
+      return;
     }
     await this.executor.query(
       `INSERT INTO materials_versions (

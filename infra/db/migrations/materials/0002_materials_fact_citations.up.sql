@@ -9,7 +9,10 @@ CREATE TABLE materials_fact_citations (
   CONSTRAINT materials_fact_citations_material_fk
     FOREIGN KEY (material_id, material_version)
     REFERENCES materials_versions (material_id, version)
-    ON DELETE CASCADE
+    ON DELETE CASCADE,
+  CONSTRAINT materials_fact_citations_fact_fk
+    FOREIGN KEY (fact_id, fact_version)
+    REFERENCES profile_fact_versions (resource_id, version)
 );
 
 CREATE INDEX materials_fact_citations_user_id_idx

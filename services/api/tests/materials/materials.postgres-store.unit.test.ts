@@ -7,7 +7,11 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { PostgresMaterialsStore } from '../../src/modules/materials';
-import type { Material, MaterialAuditEvent } from '../../src/modules/materials';
+import type {
+  Material,
+  MaterialAuditEvent,
+  MaterialFactCitation,
+} from '../../src/modules/materials';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -20,24 +24,80 @@ if (!DATABASE_URL) {
   );
 }
 
-const MIGRATIONS_DIR = path.resolve(
+const MATERIALS_MIGRATIONS_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../../../infra/db/migrations/materials',
 );
 
-async function migrationSql(suffix: '.up.sql' | '.down.sql'): Promise<string[]> {
-  const files = (await readdir(MIGRATIONS_DIR)).filter((file) => file.endsWith(suffix)).sort();
-  return Promise.all(files.map((file) => readFile(path.join(MIGRATIONS_DIR, file), 'utf8')));
+// materials_fact_citations has a foreign key into profile_fact_versions, so the profile
+// module's tables must exist in the same schema before the materials migrations run.
+const PROFILE_MIGRATIONS_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../../infra/db/migrations/profile',
+);
+
+async function migrationSql(dir: string, suffix: '.up.sql' | '.down.sql'): Promise<string[]> {
+  const files = (await readdir(dir)).filter((file) => file.endsWith(suffix)).sort();
+  return Promise.all(files.map((file) => readFile(path.join(dir, file), 'utf8')));
 }
 
-async function resetSchema(pool: Pool): Promise<void> {
-  const downSqls = (await migrationSql('.down.sql')).reverse();
-  for (const sql of downSqls) {
+async function applySchema(pool: Pool): Promise<void> {
+  for (const sql of await migrationSql(PROFILE_MIGRATIONS_DIR, '.up.sql')) {
+    await pool.query(sql);
+  }
+  for (const sql of await migrationSql(MATERIALS_MIGRATIONS_DIR, '.up.sql')) {
     await pool.query(sql);
   }
 }
 
-function materialFixture(userId: string, overrides: Partial<Material> = {}): Material {
+async function resetSchema(pool: Pool): Promise<void> {
+  for (const sql of (await migrationSql(MATERIALS_MIGRATIONS_DIR, '.down.sql')).reverse()) {
+    await pool.query(sql);
+  }
+  for (const sql of (await migrationSql(PROFILE_MIGRATIONS_DIR, '.down.sql')).reverse()) {
+    await pool.query(sql);
+  }
+}
+
+/** Inserts a real profile_facts + profile_fact_versions row so a citation can legally point at it. */
+async function seedFact(
+  pool: Pool,
+  userId: string,
+  overrides: { factId?: string; version?: number } = {},
+): Promise<MaterialFactCitation> {
+  const fact_id = overrides.factId ?? randomUUID();
+  const fact_version = overrides.version ?? 1;
+  const now = new Date().toISOString();
+  await pool.query(
+    `INSERT INTO profile_facts (
+       id, user_id, kind, value, scope, status, source, version, created_at, updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [
+      fact_id,
+      userId,
+      'skill',
+      JSON.stringify({ skill: 'TypeScript' }),
+      JSON.stringify({ use: 'resume' }),
+      'confirmed',
+      JSON.stringify({ type: 'user', reference: 'test-fixture' }),
+      fact_version,
+      now,
+      now,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO profile_fact_versions (resource_id, user_id, version, recorded_at, snapshot)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [fact_id, userId, fact_version, now, JSON.stringify({})],
+  );
+  return { fact_id, fact_version, claim_path: 'claims.0' };
+}
+
+function materialFixture(
+  userId: string,
+  citation: MaterialFactCitation,
+  overrides: Partial<Material> = {},
+): Material {
   const now = new Date().toISOString();
   return {
     id: randomUUID(),
@@ -47,7 +107,7 @@ function materialFixture(userId: string, overrides: Partial<Material> = {}): Mat
     status: 'review_required',
     version: 1,
     file_ids: [],
-    fact_citations: [{ fact_id: randomUUID(), fact_version: 1, claim_path: 'claims.0' }],
+    fact_citations: [citation],
     document: { kind: 'resume', sections: [], claims: [], plain_text: 'Sample resume text.' },
     checks: {
       word_count: 3,
@@ -91,10 +151,7 @@ describe.skipIf(!DATABASE_URL)('PostgresMaterialsStore integration', () => {
   beforeAll(async () => {
     pool = new Pool({ connectionString: DATABASE_URL });
     await resetSchema(pool);
-    const upSqls = await migrationSql('.up.sql');
-    for (const sql of upSqls) {
-      await pool.query(sql);
-    }
+    await applySchema(pool);
     store = new PostgresMaterialsStore(pool);
   });
 
@@ -106,7 +163,8 @@ describe.skipIf(!DATABASE_URL)('PostgresMaterialsStore integration', () => {
   it('round-trips a material version and enforces user_id scoping in SQL', async () => {
     const userId = randomUUID();
     const otherUserId = randomUUID();
-    const material = materialFixture(userId);
+    const citation = await seedFact(pool, userId);
+    const material = materialFixture(userId, citation);
 
     await store.saveMaterial(userId, material);
 
@@ -120,8 +178,9 @@ describe.skipIf(!DATABASE_URL)('PostgresMaterialsStore integration', () => {
 
   it('resolves the highest version as current and lists all versions in order', async () => {
     const userId = randomUUID();
-    const first = materialFixture(userId);
-    const second = materialFixture(userId, {
+    const citation = await seedFact(pool, userId);
+    const first = materialFixture(userId, citation);
+    const second = materialFixture(userId, citation, {
       id: first.id,
       job_id: first.job_id,
       version: 2,
@@ -140,7 +199,8 @@ describe.skipIf(!DATABASE_URL)('PostgresMaterialsStore integration', () => {
 
   it('persists and lists audit events scoped by tenant', async () => {
     const userId = randomUUID();
-    const material = materialFixture(userId);
+    const citation = await seedFact(pool, userId);
+    const material = materialFixture(userId, citation);
     await store.saveMaterial(userId, material);
     const event = auditEventFixture(material);
     await store.appendAuditEvent(userId, event);
@@ -153,7 +213,8 @@ describe.skipIf(!DATABASE_URL)('PostgresMaterialsStore integration', () => {
 
   it('rolls back all writes when the transaction callback throws', async () => {
     const userId = randomUUID();
-    const material = materialFixture(userId);
+    const citation = await seedFact(pool, userId);
+    const material = materialFixture(userId, citation);
 
     await expect(
       store.withTransaction(async (scoped) => {
@@ -168,17 +229,26 @@ describe.skipIf(!DATABASE_URL)('PostgresMaterialsStore integration', () => {
   it('enforces the materials_fact_citations foreign key against materials_versions', async () => {
     const userId = randomUUID();
     const nonExistentMaterialId = randomUUID();
+    const citation = await seedFact(pool, userId);
 
     await expect(
       pool.query(
         `INSERT INTO materials_fact_citations (
            id, material_id, material_version, fact_id, fact_version, claim_path, user_id
          ) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [randomUUID(), nonExistentMaterialId, 1, randomUUID(), 1, 'claims.0', userId],
+        [
+          randomUUID(),
+          nonExistentMaterialId,
+          1,
+          citation.fact_id,
+          citation.fact_version,
+          'claims.0',
+          userId,
+        ],
       ),
     ).rejects.toMatchObject({ code: '23503' });
 
-    const material = materialFixture(userId);
+    const material = materialFixture(userId, citation);
     await store.saveMaterial(userId, material);
     const { rows } = await pool.query(
       'SELECT fact_id FROM materials_fact_citations WHERE material_id = $1 AND user_id = $2',
@@ -197,5 +267,41 @@ describe.skipIf(!DATABASE_URL)('PostgresMaterialsStore integration', () => {
       [material.id, userId],
     );
     expect(afterCascade).toHaveLength(0);
+  });
+
+  it('rejects saveMaterial when a fact citation points at a fact_id that does not exist', async () => {
+    const userId = randomUUID();
+    const unknownCitation: MaterialFactCitation = {
+      fact_id: randomUUID(),
+      fact_version: 1,
+      claim_path: 'claims.0',
+    };
+    const material = materialFixture(userId, unknownCitation);
+
+    await expect(store.saveMaterial(userId, material)).rejects.toMatchObject({ code: '23503' });
+
+    // The rejected write must not leave a dangling materials_versions row behind: saveMaterial
+    // runs its multi-statement insert in a transaction, so the fact FK violation rolls back
+    // the material row too, not just the citation row.
+    expect(await store.getCurrentMaterial(userId, material.id)).toBeUndefined();
+    const { rows } = await pool.query(
+      'SELECT 1 FROM materials_fact_citations WHERE material_id = $1 AND user_id = $2',
+      [material.id, userId],
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('rejects saveMaterial when a fact citation points at an existing fact but the wrong version', async () => {
+    const userId = randomUUID();
+    const citation = await seedFact(pool, userId);
+    const wrongVersionCitation: MaterialFactCitation = {
+      fact_id: citation.fact_id,
+      fact_version: citation.fact_version + 1,
+      claim_path: 'claims.0',
+    };
+    const material = materialFixture(userId, wrongVersionCitation);
+
+    await expect(store.saveMaterial(userId, material)).rejects.toMatchObject({ code: '23503' });
+    expect(await store.getCurrentMaterial(userId, material.id)).toBeUndefined();
   });
 });
