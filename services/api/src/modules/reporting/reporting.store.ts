@@ -94,6 +94,13 @@ export class InMemoryReportingStore implements ReportingStore {
     return report ? clone(report) : undefined;
   }
 
+  async getReportById(userId: string, reportId: string): Promise<DailyReport | undefined> {
+    const report = [...this.reports.values()].find(
+      (candidate) => candidate.user_id === userId && candidate.id === reportId,
+    );
+    return report ? clone(report) : undefined;
+  }
+
   async saveReport(userId: string, report: DailyReport): Promise<void> {
     if (report.user_id !== userId) {
       throw new Error('Reporting store tenant mismatch.');

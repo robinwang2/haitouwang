@@ -149,14 +149,18 @@ describe('InMemoryApplicationsStore', () => {
     const store = new InMemoryApplicationsStore();
     const receiptId = 'a0000000-0000-4000-8000-000000000001';
     const record = {
+      receipt_id: receiptId,
       request_hash: 'hash-1',
       response: { receipt_id: receiptId, application: application(), replayed: false },
     };
-    await store.saveReceipt(USER_ID, receiptId, record);
+    await store.saveReceipt(USER_ID, 'agent:command:1', record);
 
-    expect(await store.getReceipt(USER_ID, receiptId)).toEqual(record);
-    expect(await store.getReceipt(OTHER_USER_ID, receiptId)).toBeUndefined();
-    await expect(store.saveReceipt(USER_ID, receiptId, record)).rejects.toThrow();
+    expect(await store.getReceipt(USER_ID, 'agent:command:1')).toEqual(record);
+    expect(await store.getReceipt(OTHER_USER_ID, 'agent:command:1')).toBeUndefined();
+    await expect(store.saveReceipt(USER_ID, 'agent:command:2', record)).rejects.toThrow();
+    await expect(
+      store.saveReceipt(OTHER_USER_ID, 'agent:command:2', record),
+    ).resolves.toBeUndefined();
   });
 
   it('scopes audit events by tenant', async () => {

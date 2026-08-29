@@ -24,6 +24,7 @@ function createReportingStore(): ReportingStore {
       saveSourceRecord: true,
       listSourceRecords: true,
       getReport: true,
+      getReportById: true,
       saveReport: true,
     },
     (pool) => new PostgresReportingStore(pool),

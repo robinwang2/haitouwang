@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { PostgresReportingStore } from '../../src/modules/reporting';
+import { PostgresReportingStore, ReportingService } from '../../src/modules/reporting';
 import type {
   DailyReport,
   Notification,
@@ -118,6 +118,20 @@ describe.skipIf(!DATABASE_URL)('PostgresReportingStore integration', () => {
   afterAll(async () => {
     await resetSchema(pool);
     await pool.end();
+  });
+
+  it('persists ReportingService state across service instances', async () => {
+    const userId = randomUUID();
+    const firstService = new ReportingService(store);
+    const created = await firstService.requestNotification(userId, {
+      type: 'high_match',
+      dedupe_key: `match:${randomUUID()}`,
+      channel: 'in_app',
+      source_ref: { type: 'job', id: randomUUID(), version: 1 },
+    });
+
+    const restartedService = new ReportingService(store);
+    expect(await restartedService.listNotifications(userId)).toEqual([created]);
   });
 
   it('round-trips notification preferences and enforces user_id scoping in SQL', async () => {

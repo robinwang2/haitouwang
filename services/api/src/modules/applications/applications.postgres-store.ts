@@ -54,6 +54,7 @@ interface IdempotencyRow extends QueryResultRow {
 }
 
 interface ReceiptRow extends QueryResultRow {
+  receipt_id: string;
   request_hash: string;
   response: ApplicationReceiptRecord['response'];
 }
@@ -256,15 +257,17 @@ export class PostgresApplicationsStore implements ApplicationsStore {
   }
 
   async listManualTasks(userId: string, applicationId?: string): Promise<ManualApplicationTask[]> {
-    const params: unknown[] = [userId];
-    let where = 'user_id = $1';
     if (applicationId) {
-      params.push(applicationId);
-      where += ` AND application_id = $${params.length}`;
+      const { rows } = await this.executor.query<ManualTaskRow>(
+        `SELECT * FROM applications_manual_tasks
+         WHERE user_id = $1 AND application_id = $2 ORDER BY created_at, id`,
+        [userId, applicationId],
+      );
+      return rows.map(mapManualTask);
     }
     const { rows } = await this.executor.query<ManualTaskRow>(
-      `SELECT * FROM applications_manual_tasks WHERE ${where} ORDER BY created_at, id`,
-      params,
+      'SELECT * FROM applications_manual_tasks WHERE user_id = $1 ORDER BY created_at, id',
+      [userId],
     );
     return rows.map(mapManualTask);
   }
@@ -311,24 +314,32 @@ export class PostgresApplicationsStore implements ApplicationsStore {
 
   async getReceipt(
     userId: string,
-    receiptId: string,
+    receiptKey: string,
   ): Promise<ApplicationReceiptRecord | undefined> {
     const { rows } = await this.executor.query<ReceiptRow>(
-      'SELECT request_hash, response FROM applications_receipts WHERE user_id = $1 AND receipt_id = $2',
-      [userId, receiptId],
+      `SELECT receipt_id, request_hash, response FROM applications_receipts
+       WHERE user_id = $1 AND receipt_key = $2`,
+      [userId, receiptKey],
     );
-    return rows[0] ? { request_hash: rows[0].request_hash, response: rows[0].response } : undefined;
+    return rows[0]
+      ? {
+          receipt_id: rows[0].receipt_id,
+          request_hash: rows[0].request_hash,
+          response: rows[0].response,
+        }
+      : undefined;
   }
 
   async saveReceipt(
     userId: string,
-    receiptId: string,
+    receiptKey: string,
     record: ApplicationReceiptRecord,
   ): Promise<void> {
     await this.executor.query(
-      `INSERT INTO applications_receipts (user_id, receipt_id, request_hash, response)
-       VALUES ($1,$2,$3,$4)`,
-      [userId, receiptId, record.request_hash, JSON.stringify(record.response)],
+      `INSERT INTO applications_receipts
+         (user_id, receipt_id, receipt_key, request_hash, response)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [userId, record.receipt_id, receiptKey, record.request_hash, JSON.stringify(record.response)],
     );
   }
 

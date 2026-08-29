@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { PostgresApplicationsStore } from '../../src/modules/applications';
+import { ApplicationsService, PostgresApplicationsStore } from '../../src/modules/applications';
 import type {
   Application,
   ApplicationAuditEvent,
@@ -133,6 +133,28 @@ describe.skipIf(!DATABASE_URL)('PostgresApplicationsStore integration', () => {
     await pool.end();
   });
 
+  it('persists ApplicationsService state across service instances', async () => {
+    const userId = randomUUID();
+    const firstService = new ApplicationsService(store);
+    const created = await firstService.createApplication(
+      userId,
+      {
+        job_id: randomUUID(),
+        goal_id: randomUUID(),
+        material_ids: [randomUUID()],
+        submission_idempotency_key: `submission:${randomUUID()}`,
+      },
+      {
+        actor: { type: 'user', id: userId },
+        idempotency_key: `create:${randomUUID()}`,
+      },
+    );
+
+    const restartedService = new ApplicationsService(store);
+    expect(await restartedService.getApplication(userId, created.id)).toEqual(created);
+    expect(await restartedService.getAuditEvents(userId)).toHaveLength(1);
+  });
+
   it('round-trips an application and enforces user_id scoping in SQL', async () => {
     const userId = randomUUID();
     const otherUserId = randomUUID();
@@ -219,14 +241,15 @@ describe.skipIf(!DATABASE_URL)('PostgresApplicationsStore integration', () => {
     await store.saveApplication(userId, application);
     const receiptId = randomUUID();
     const record = {
+      receipt_id: receiptId,
       request_hash: 'hash-1',
       response: { receipt_id: receiptId, application, replayed: false },
     };
 
-    await store.saveReceipt(userId, receiptId, record);
-    expect(await store.getReceipt(userId, receiptId)).toEqual(record);
+    await store.saveReceipt(userId, 'agent:command:1', record);
+    expect(await store.getReceipt(userId, 'agent:command:1')).toEqual(record);
 
-    await expect(store.saveReceipt(userId, receiptId, record)).rejects.toMatchObject({
+    await expect(store.saveReceipt(userId, 'agent:command:2', record)).rejects.toMatchObject({
       code: '23505',
     });
   });

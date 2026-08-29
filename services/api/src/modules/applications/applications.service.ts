@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { Inject, Injectable, Optional } from '@nestjs/common';
 
+import { APPLICATIONS_STORE } from './applications-store.interface';
+import type { ApplicationsStore } from './applications-store.interface';
 import { ApplicationError } from './applications.errors';
 import type {
   Actor,
@@ -63,17 +65,6 @@ const STATUS_ORDER: readonly ApplicationStatus[] = [
   'cancelled',
 ];
 
-interface IdempotencyRecord<T> {
-  request_hash: string;
-  response: T;
-  audit_event_id: string;
-}
-
-interface ReceiptRecord {
-  request_hash: string;
-  response: RecordedApplicationReceipt;
-}
-
 function clone<T>(value: T): T {
   return structuredClone(value);
 }
@@ -100,14 +91,10 @@ function requestHash(value: unknown): string {
 export class ApplicationsService {
   private readonly clock: { now(): Date };
   private readonly idFactory: () => string;
-  private readonly applications = new Map<string, Application>();
-  private readonly submissionKeys = new Map<string, string>();
-  private readonly manualTasks = new Map<string, ManualApplicationTask>();
-  private readonly idempotency = new Map<string, IdempotencyRecord<unknown>>();
-  private readonly receipts = new Map<string, ReceiptRecord>();
-  private readonly audit: ApplicationAuditEvent[] = [];
 
   public constructor(
+    @Inject(APPLICATIONS_STORE)
+    private readonly store: ApplicationsStore,
     @Optional()
     @Inject(APPLICATION_SERVICE_OPTIONS)
     options: ApplicationServiceOptions = {},
@@ -120,7 +107,7 @@ export class ApplicationsService {
     userId: string,
     input: CreateApplicationRequest,
     context: MutationContext,
-  ): Application {
+  ): Promise<Application> {
     this.validateIdentity(userId, context);
     this.validateCreate(input);
     return this.mutate<Application>(
@@ -128,11 +115,13 @@ export class ApplicationsService {
       'createApplication',
       input,
       context,
-      () => {
-        const businessKey = `${userId}:${input.submission_idempotency_key}`;
-        const existingId = this.submissionKeys.get(businessKey);
+      async (store) => {
+        const existingId = await store.findApplicationIdBySubmissionKey(
+          userId,
+          input.submission_idempotency_key,
+        );
         if (existingId) {
-          const existing = this.applications.get(existingId);
+          const existing = await store.getApplication(userId, existingId);
           if (existing && this.sameApplicationIntent(existing, input)) return clone(existing);
           throw new ApplicationError(
             'CONFLICT',
@@ -167,8 +156,7 @@ export class ApplicationsService {
           created_at: now,
           updated_at: now,
         };
-        this.applications.set(id, clone(application));
-        this.submissionKeys.set(businessKey, id);
+        await store.saveApplication(userId, application);
         return application;
       },
       (application) => ({
@@ -181,21 +169,24 @@ export class ApplicationsService {
     );
   }
 
-  public getApplication(userId: string, applicationId: string): Application {
-    return clone(this.requireApplication(userId, applicationId));
+  public async getApplication(userId: string, applicationId: string): Promise<Application> {
+    return clone(await this.requireApplication(this.store, userId, applicationId));
   }
 
-  public listApplications(userId: string, filter: ApplicationListFilter = {}): Application[] {
+  public async listApplications(
+    userId: string,
+    filter: ApplicationListFilter = {},
+  ): Promise<Application[]> {
     this.validateUuid(userId, 'user_id');
     if (filter.due_before) this.validateTimestamp(filter.due_before, 'due_before');
     if (filter.overdue_at) this.validateTimestamp(filter.overdue_at, 'overdue_at');
     const manualApplicationIds = new Set(
-      [...this.manualTasks.values()]
+      (await this.store.listManualTasks(userId))
         .filter((task) => task.user_id === userId && task.status === 'requires_human')
         .map((task) => task.resource.id),
     );
 
-    return [...this.applications.values()]
+    return (await this.store.listApplications(userId))
       .filter((application) => application.user_id === userId)
       .filter(
         (application) => !filter.statuses?.length || filter.statuses.includes(application.status),
@@ -223,8 +214,11 @@ export class ApplicationsService {
       .map(clone);
   }
 
-  public getBoard(userId: string, filter: ApplicationListFilter = {}): ApplicationBoard {
-    const applications = this.listApplications(userId, filter);
+  public async getBoard(
+    userId: string,
+    filter: ApplicationListFilter = {},
+  ): Promise<ApplicationBoard> {
+    const applications = await this.listApplications(userId, filter);
     return {
       columns: STATUS_ORDER.map((status) => ({
         status,
@@ -239,7 +233,7 @@ export class ApplicationsService {
     applicationId: string,
     request: ApplicationTransitionRequest,
     context: TransitionContext,
-  ): Application {
+  ): Promise<Application> {
     this.validateIdentity(userId, context);
     this.validateTransitionRequest(request);
     return this.mutate<Application>(
@@ -247,10 +241,17 @@ export class ApplicationsService {
       `transitionApplication:${applicationId}`,
       { applicationId, request, expected_version: context.expected_version },
       context,
-      () => {
-        const current = this.requireApplication(userId, applicationId);
+      async (store) => {
+        const current = await this.requireApplication(store, userId, applicationId);
         this.assertVersion(current.version, context.expected_version);
-        return this.applyTransition(current, request, context.actor, context.prerequisites);
+        const updated = this.applyTransition(
+          current,
+          request,
+          context.actor,
+          context.prerequisites,
+        );
+        await store.saveApplication(userId, updated);
+        return updated;
       },
       (application) => {
         const latest = application.timeline.at(-1);
@@ -270,64 +271,75 @@ export class ApplicationsService {
   public recordAgentReceipt(
     userId: string,
     receipt: AgentApplicationReceipt,
-  ): RecordedApplicationReceipt {
+  ): Promise<RecordedApplicationReceipt> {
     this.validateUuid(userId, 'user_id');
     this.validateReceipt(receipt);
     const receiptKey = `${receipt.agent_id}:${receipt.command_id}:${receipt.sequence}`;
     const hash = requestHash(receipt);
-    const prior = this.receipts.get(receiptKey);
-    if (prior) {
-      if (prior.request_hash !== hash) {
-        throw new ApplicationError(
-          'IDEMPOTENCY_KEY_REUSED',
-          'The agent command receipt sequence was reused with different content.',
-          409,
-        );
+    return this.store.withTransaction(async (store) => {
+      const prior = await store.getReceipt(userId, receiptKey);
+      if (prior) {
+        if (prior.request_hash !== hash) {
+          throw new ApplicationError(
+            'IDEMPOTENCY_KEY_REUSED',
+            'The agent command receipt sequence was reused with different content.',
+            409,
+          );
+        }
+        return clone(prior.response);
       }
-      return clone(prior.response);
-    }
 
-    let application = this.requireApplication(userId, receipt.application_id);
-    const actor: Actor = { type: 'agent', id: receipt.agent_id };
-    if (receipt.status === 'manual_intervention_required') {
-      if (!receipt.manual_reason) {
-        throw new ApplicationError(
-          'VALIDATION_FAILED',
-          'manual_reason is required for a manual intervention receipt.',
-          400,
-        );
+      let application = await this.requireApplication(store, userId, receipt.application_id);
+      const actor: Actor = { type: 'agent', id: receipt.agent_id };
+      if (receipt.status === 'manual_intervention_required') {
+        if (!receipt.manual_reason) {
+          throw new ApplicationError(
+            'VALIDATION_FAILED',
+            'manual_reason is required for a manual intervention receipt.',
+            400,
+          );
+        }
+        if (TRANSITIONS[application.status].includes('manual_required')) {
+          application = this.applyTransition(
+            application,
+            {
+              to_status: 'manual_required',
+              reason_code: 'agent_manual_intervention',
+              manual_reason: receipt.manual_reason,
+            },
+            actor,
+          );
+          await store.saveApplication(userId, application);
+        }
+      } else if (receipt.status === 'completed') {
+        const updated = this.applyCompletedReceipt(application, receipt, actor);
+        if (updated !== application) {
+          application = updated;
+          await store.saveApplication(userId, application);
+        }
       }
-      if (TRANSITIONS[application.status].includes('manual_required')) {
-        application = this.applyTransition(
-          application,
-          {
-            to_status: 'manual_required',
-            reason_code: 'agent_manual_intervention',
-            manual_reason: receipt.manual_reason,
-          },
-          actor,
-        );
-      }
-    } else if (receipt.status === 'completed') {
-      application = this.applyCompletedReceipt(application, receipt, actor);
-    }
 
-    const response: RecordedApplicationReceipt = {
-      receipt_id: receipt.receipt_id,
-      application: clone(application),
-      replayed: false,
-    };
-    this.receipts.set(receiptKey, { request_hash: hash, response: clone(response) });
-    this.appendAudit({
-      actor,
-      action: 'application.agent_receipt_recorded',
-      resource: { type: 'application', id: application.id, version: application.version },
-      outcome:
-        receipt.status === 'manual_intervention_required' ? 'manual_intervention' : 'succeeded',
-      to_status: application.status,
-      reason_code: receipt.status,
+      const response: RecordedApplicationReceipt = {
+        receipt_id: receipt.receipt_id,
+        application: clone(application),
+        replayed: false,
+      };
+      await store.saveReceipt(userId, receiptKey, {
+        receipt_id: receipt.receipt_id,
+        request_hash: hash,
+        response: clone(response),
+      });
+      await this.appendAudit(store, userId, {
+        actor,
+        action: 'application.agent_receipt_recorded',
+        resource: { type: 'application', id: application.id, version: application.version },
+        outcome:
+          receipt.status === 'manual_intervention_required' ? 'manual_intervention' : 'succeeded',
+        to_status: application.status,
+        reason_code: receipt.status,
+      });
+      return response;
     });
-    return response;
   }
 
   public createManualTask(
@@ -335,7 +347,7 @@ export class ApplicationsService {
     applicationId: string,
     request: CreateManualTaskRequest,
     context: TransitionContext,
-  ): ManualApplicationTask {
+  ): Promise<ManualApplicationTask> {
     this.validateIdentity(userId, context);
     this.validateManualTask(request);
     return this.mutate<ManualApplicationTask>(
@@ -343,8 +355,8 @@ export class ApplicationsService {
       `createManualTask:${applicationId}`,
       { applicationId, request, expected_version: context.expected_version },
       context,
-      () => {
-        let application = this.requireApplication(userId, applicationId);
+      async (store) => {
+        let application = await this.requireApplication(store, userId, applicationId);
         this.assertVersion(application.version, context.expected_version);
         if (application.status !== 'manual_required') {
           if (!TRANSITIONS[application.status].includes('manual_required')) {
@@ -363,6 +375,7 @@ export class ApplicationsService {
             },
             context.actor,
           );
+          await store.saveApplication(userId, application);
         }
         const now = this.now();
         const task: ManualApplicationTask = {
@@ -388,7 +401,7 @@ export class ApplicationsService {
           created_at: now,
           updated_at: now,
         };
-        this.manualTasks.set(task.id, clone(task));
+        await store.saveManualTask(userId, task);
         return task;
       },
       (task) => ({
@@ -401,9 +414,12 @@ export class ApplicationsService {
     );
   }
 
-  public listManualTasks(userId: string, applicationId?: string): ManualApplicationTask[] {
+  public async listManualTasks(
+    userId: string,
+    applicationId?: string,
+  ): Promise<ManualApplicationTask[]> {
     this.validateUuid(userId, 'user_id');
-    return [...this.manualTasks.values()]
+    return (await this.store.listManualTasks(userId, applicationId))
       .filter(
         (task) => task.user_id === userId && (!applicationId || task.resource.id === applicationId),
       )
@@ -413,25 +429,9 @@ export class ApplicationsService {
       .map(clone);
   }
 
-  public getAuditEvents(userId: string): ApplicationAuditEvent[] {
+  public async getAuditEvents(userId: string): Promise<ApplicationAuditEvent[]> {
     this.validateUuid(userId, 'user_id');
-    const applicationIds = new Set(
-      [...this.applications.values()]
-        .filter((application) => application.user_id === userId)
-        .map((application) => application.id),
-    );
-    const taskIds = new Set(
-      [...this.manualTasks.values()]
-        .filter((task) => task.user_id === userId)
-        .map((task) => task.id),
-    );
-    return this.audit
-      .filter(
-        (event) =>
-          (event.resource.type === 'application' && applicationIds.has(event.resource.id)) ||
-          (event.resource.type === 'task' && taskIds.has(event.resource.id)),
-      )
-      .map(clone);
+    return (await this.store.listAuditEvents(userId)).map(clone);
   }
 
   private applyCompletedReceipt(
@@ -606,57 +606,63 @@ export class ApplicationsService {
       updated_at: now,
     };
     if (request.to_status !== 'manual_required') delete updated.manual_reason;
-    this.applications.set(updated.id, clone(updated));
     return updated;
   }
 
-  private mutate<T>(
+  private async mutate<T>(
     userId: string,
     operation: string,
     request: unknown,
     context: MutationContext,
-    change: () => T,
+    change: (store: ApplicationsStore) => Promise<T>,
     auditFactory: (result: T) => Omit<ApplicationAuditEvent, 'event_id' | 'occurred_at'>,
-  ): T {
-    const key = `${userId}:${operation}:${context.idempotency_key}`;
+  ): Promise<T> {
     const hash = requestHash(request);
-    const prior = this.idempotency.get(key) as IdempotencyRecord<T> | undefined;
-    if (prior) {
-      if (prior.request_hash !== hash) {
-        throw new ApplicationError(
-          'IDEMPOTENCY_KEY_REUSED',
-          'The idempotency key was already used for a different request.',
-          409,
-        );
+    return this.store.withTransaction(async (store) => {
+      const prior = await store.getIdempotencyRecord(userId, operation, context.idempotency_key);
+      if (prior) {
+        if (prior.request_hash !== hash) {
+          throw new ApplicationError(
+            'IDEMPOTENCY_KEY_REUSED',
+            'The idempotency key was already used for a different request.',
+            409,
+          );
+        }
+        return clone(prior.response as T);
       }
-      return clone(prior.response);
-    }
-    const result = change();
-    const event = this.appendAudit(auditFactory(result));
-    this.idempotency.set(key, {
-      request_hash: hash,
-      response: clone(result),
-      audit_event_id: event.event_id,
+      const result = await change(store);
+      const event = await this.appendAudit(store, userId, auditFactory(result));
+      await store.saveIdempotencyRecord(userId, operation, context.idempotency_key, {
+        request_hash: hash,
+        response: clone(result),
+        audit_event_id: event.event_id,
+      });
+      return clone(result);
     });
-    return clone(result);
   }
 
-  private appendAudit(
+  private async appendAudit(
+    store: ApplicationsStore,
+    userId: string,
     event: Omit<ApplicationAuditEvent, 'event_id' | 'occurred_at'>,
-  ): ApplicationAuditEvent {
+  ): Promise<ApplicationAuditEvent> {
     const complete: ApplicationAuditEvent = {
       ...clone(event),
       event_id: this.idFactory(),
       occurred_at: this.now(),
     };
-    this.audit.push(complete);
+    await store.appendAuditEvent(userId, complete);
     return complete;
   }
 
-  private requireApplication(userId: string, applicationId: string): Application {
+  private async requireApplication(
+    store: ApplicationsStore,
+    userId: string,
+    applicationId: string,
+  ): Promise<Application> {
     this.validateUuid(applicationId, 'application_id');
-    const application = this.applications.get(applicationId);
-    if (!application || application.user_id !== userId) {
+    const application = await store.getApplication(userId, applicationId);
+    if (!application) {
       throw new ApplicationError('RESOURCE_NOT_FOUND', 'Application was not found.', 404);
     }
     return clone(application);
@@ -834,12 +840,15 @@ function mergeEvidence(
   current: readonly SubmissionEvidence[],
   incoming: readonly SubmissionEvidence[],
 ): SubmissionEvidence[] {
-  const result = new Map<string, SubmissionEvidence>();
+  const result: Array<{ key: string; value: SubmissionEvidence }> = [];
   for (const item of [...current, ...incoming]) {
     const key = `${item.type}:${item.reference ?? ''}:${item.captured_at}:${item.target_origin}`;
-    result.set(key, clone(item));
+    const index = result.findIndex((entry) => entry.key === key);
+    const entry = { key, value: clone(item) };
+    if (index === -1) result.push(entry);
+    else result[index] = entry;
   }
-  return [...result.values()];
+  return result.map((entry) => entry.value);
 }
 
 function timelineEvidenceRef(evidence: readonly SubmissionEvidence[] | undefined): {

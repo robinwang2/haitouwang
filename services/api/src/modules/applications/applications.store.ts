@@ -111,20 +111,25 @@ export class InMemoryApplicationsStore implements ApplicationsStore {
 
   async getReceipt(
     userId: string,
-    receiptId: string,
+    receiptKey: string,
   ): Promise<ApplicationReceiptRecord | undefined> {
-    const record = this.receipts.get(this.receiptMapKey(userId, receiptId));
+    const record = this.receipts.get(this.receiptMapKey(userId, receiptKey));
     return record ? clone(record) : undefined;
   }
 
   async saveReceipt(
     userId: string,
-    receiptId: string,
+    receiptKey: string,
     record: ApplicationReceiptRecord,
   ): Promise<void> {
-    const key = this.receiptMapKey(userId, receiptId);
+    const key = this.receiptMapKey(userId, receiptKey);
     if (this.receipts.has(key)) {
-      throw new Error(`receipt_id already recorded: ${receiptId}`);
+      throw new Error(`receipt key already recorded: ${receiptKey}`);
+    }
+    for (const [existingKey, existing] of this.receipts.entries()) {
+      if (existingKey.startsWith(`${userId}:`) && existing.receipt_id === record.receipt_id) {
+        throw new Error(`receipt_id already recorded: ${record.receipt_id}`);
+      }
     }
     this.receipts.set(key, clone(record));
   }
@@ -143,7 +148,7 @@ export class InMemoryApplicationsStore implements ApplicationsStore {
     return `${userId}:${operation}:${idempotencyKey}`;
   }
 
-  private receiptMapKey(userId: string, receiptId: string): string {
-    return `${userId}:${receiptId}`;
+  private receiptMapKey(userId: string, receiptKey: string): string {
+    return `${userId}:${receiptKey}`;
   }
 }

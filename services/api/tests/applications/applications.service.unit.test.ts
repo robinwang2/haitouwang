@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ApplicationError,
   ApplicationsService,
+  InMemoryApplicationsStore,
   type Application,
   type ApplicationStatus,
   type MutationContext,
@@ -23,9 +24,9 @@ function context(key: string): MutationContext {
   };
 }
 
-function expectErrorCode(action: () => unknown, code: string): void {
+async function expectErrorCode(action: () => Promise<unknown>, code: string): Promise<void> {
   try {
-    action();
+    await action();
   } catch (error) {
     expect(error).toMatchObject({ code });
     return;
@@ -33,7 +34,7 @@ function expectErrorCode(action: () => unknown, code: string): void {
   throw new Error(`Expected ${code} to be thrown.`);
 }
 
-function create(service: ApplicationsService): Application {
+function create(service: ApplicationsService): Promise<Application> {
   return service.createApplication(
     USER_ID,
     {
@@ -53,7 +54,7 @@ function transition(
   toStatus: ApplicationStatus,
   key: string,
   prerequisites: Record<string, boolean> = {},
-): Application {
+): Promise<Application> {
   return service.transitionApplication(
     USER_ID,
     application.id,
@@ -72,30 +73,48 @@ function transition(
   );
 }
 
-function reachAwaitingConfirmation(service: ApplicationsService): Application {
-  let application = create(service);
-  application = transition(service, application, 'materials_ready', 'ready');
-  application = transition(service, application, 'approved', 'approved', {
+async function reachAwaitingConfirmation(service: ApplicationsService): Promise<Application> {
+  let application = await create(service);
+  application = await transition(service, application, 'materials_ready', 'ready');
+  application = await transition(service, application, 'approved', 'approved', {
     materials_approved: true,
     no_open_must_fix: true,
   });
-  application = transition(service, application, 'queued', 'queued');
-  application = transition(service, application, 'filling', 'filling');
+  application = await transition(service, application, 'queued', 'queued');
+  application = await transition(service, application, 'filling', 'filling');
   return transition(service, application, 'awaiting_confirmation', 'preview', {
     preview_ready: true,
   });
 }
 
 describe('ApplicationsService state and evidence', () => {
-  it('allows only contracted transitions and replays an identical transition once', () => {
-    const service = new ApplicationsService();
-    const application = create(service);
+  it('persists business state across service instances through the injected store', async () => {
+    const store = new InMemoryApplicationsStore();
+    const firstService = new ApplicationsService(store);
+    const created = await create(firstService);
 
-    expect(() => transition(service, application, 'submitted', 'illegal')).toThrowError(
+    const restartedService = new ApplicationsService(store);
+    const transitioned = await transition(
+      restartedService,
+      created,
+      'materials_ready',
+      'after-restart',
+    );
+
+    expect(await restartedService.getApplication(USER_ID, created.id)).toEqual(transitioned);
+    expect(await restartedService.listApplications(USER_ID)).toHaveLength(1);
+    expect(await restartedService.getAuditEvents(USER_ID)).toHaveLength(2);
+  });
+
+  it('allows only contracted transitions and replays an identical transition once', async () => {
+    const service = new ApplicationsService(new InMemoryApplicationsStore());
+    const application = await create(service);
+
+    await expect(transition(service, application, 'submitted', 'illegal')).rejects.toThrowError(
       ApplicationError,
     );
-    const first = transition(service, application, 'materials_ready', 'ready');
-    const replay = service.transitionApplication(
+    const first = await transition(service, application, 'materials_ready', 'ready');
+    const replay = await service.transitionApplication(
       USER_ID,
       application.id,
       { to_status: 'materials_ready', reason_code: 'move_to_materials_ready' },
@@ -103,8 +122,8 @@ describe('ApplicationsService state and evidence', () => {
     );
 
     expect(replay).toEqual(first);
-    expect(service.getApplication(USER_ID, application.id).timeline).toHaveLength(2);
-    expectErrorCode(
+    expect((await service.getApplication(USER_ID, application.id)).timeline).toHaveLength(2);
+    await expectErrorCode(
       () =>
         service.transitionApplication(
           USER_ID,
@@ -116,21 +135,27 @@ describe('ApplicationsService state and evidence', () => {
     );
   });
 
-  it('never marks submission successful without verifiable third-party evidence', () => {
-    const service = new ApplicationsService();
-    let application = reachAwaitingConfirmation(service);
-    application = transition(service, application, 'submitted_pending_verification', 'submit', {
-      confirmation_verified: true,
-    });
+  it('never marks submission successful without verifiable third-party evidence', async () => {
+    const service = new ApplicationsService(new InMemoryApplicationsStore());
+    let application = await reachAwaitingConfirmation(service);
+    application = await transition(
+      service,
+      application,
+      'submitted_pending_verification',
+      'submit',
+      {
+        confirmation_verified: true,
+      },
+    );
 
-    expectErrorCode(
+    await expectErrorCode(
       () => transition(service, application, 'submitted', 'no-evidence'),
       'EVIDENCE_REQUIRED',
     );
-    expect(service.getApplication(USER_ID, application.id).status).toBe(
+    expect((await service.getApplication(USER_ID, application.id)).status).toBe(
       'submitted_pending_verification',
     );
-    expectErrorCode(
+    await expectErrorCode(
       () =>
         service.transitionApplication(
           USER_ID,
@@ -153,7 +178,7 @@ describe('ApplicationsService state and evidence', () => {
       'EVIDENCE_REQUIRED',
     );
 
-    const submitted = service.transitionApplication(
+    const submitted = await service.transitionApplication(
       USER_ID,
       application.id,
       {
@@ -178,9 +203,9 @@ describe('ApplicationsService state and evidence', () => {
     });
   });
 
-  it('records agent receipts idempotently and leaves uncertain submissions pending', () => {
-    const service = new ApplicationsService();
-    const awaiting = reachAwaitingConfirmation(service);
+  it('records agent receipts idempotently and leaves uncertain submissions pending', async () => {
+    const service = new ApplicationsService(new InMemoryApplicationsStore());
+    const awaiting = await reachAwaitingConfirmation(service);
     const receipt = {
       receipt_id: randomUUID(),
       agent_id: AGENT_ID,
@@ -193,13 +218,13 @@ describe('ApplicationsService state and evidence', () => {
       confirmation_verified: true,
     };
 
-    const first = service.recordAgentReceipt(USER_ID, receipt);
-    const replay = service.recordAgentReceipt(USER_ID, receipt);
+    const first = await service.recordAgentReceipt(USER_ID, receipt);
+    const replay = await service.recordAgentReceipt(USER_ID, receipt);
     expect(replay).toEqual(first);
     expect(first.application.status).toBe('submitted_pending_verification');
-    expect(service.getApplication(USER_ID, awaiting.id).timeline).toHaveLength(7);
+    expect((await service.getApplication(USER_ID, awaiting.id)).timeline).toHaveLength(7);
 
-    const verified = service.recordAgentReceipt(USER_ID, {
+    const verified = await service.recordAgentReceipt(USER_ID, {
       ...receipt,
       receipt_id: randomUUID(),
       sequence: 2,
@@ -208,7 +233,7 @@ describe('ApplicationsService state and evidence', () => {
       result: { confirmation_number: 'ATS-2001' },
     });
     expect(verified.application.status).toBe('submitted');
-    expectErrorCode(
+    await expectErrorCode(
       () =>
         service.recordAgentReceipt(USER_ID, {
           ...receipt,
@@ -219,18 +244,18 @@ describe('ApplicationsService state and evidence', () => {
     );
   });
 
-  it('builds a reference-only manual task package and filters the board', () => {
-    const service = new ApplicationsService();
-    let application = create(service);
-    application = transition(service, application, 'materials_ready', 'ready');
-    application = transition(service, application, 'approved', 'approved', {
+  it('builds a reference-only manual task package and filters the board', async () => {
+    const service = new ApplicationsService(new InMemoryApplicationsStore());
+    let application = await create(service);
+    application = await transition(service, application, 'materials_ready', 'ready');
+    application = await transition(service, application, 'approved', 'approved', {
       materials_approved: true,
       no_open_must_fix: true,
     });
-    application = transition(service, application, 'queued', 'queued');
-    application = transition(service, application, 'filling', 'filling');
+    application = await transition(service, application, 'queued', 'queued');
+    application = await transition(service, application, 'filling', 'filling');
 
-    const task = service.createManualTask(
+    const task = await service.createManualTask(
       USER_ID,
       application.id,
       {
@@ -256,7 +281,7 @@ describe('ApplicationsService state and evidence', () => {
       manual_reason: 'unknown_required_field',
     });
     expect(JSON.stringify(task)).not.toMatch(/password|cookie|captcha_value/i);
-    expect(service.getBoard(USER_ID, { has_manual_task: true })).toMatchObject({ total: 1 });
-    expect(service.getApplication(USER_ID, application.id).status).toBe('manual_required');
+    expect(await service.getBoard(USER_ID, { has_manual_task: true })).toMatchObject({ total: 1 });
+    expect((await service.getApplication(USER_ID, application.id)).status).toBe('manual_required');
   });
 });

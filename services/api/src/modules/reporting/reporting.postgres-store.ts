@@ -299,6 +299,14 @@ export class PostgresReportingStore implements ReportingStore {
     return rows[0] ? mapReport(rows[0]) : undefined;
   }
 
+  async getReportById(userId: string, reportId: string): Promise<DailyReport | undefined> {
+    const { rows } = await this.executor.query<ReportRow>(
+      'SELECT * FROM reporting_reports WHERE user_id = $1 AND id = $2',
+      [userId, reportId],
+    );
+    return rows[0] ? mapReport(rows[0]) : undefined;
+  }
+
   async saveReport(userId: string, report: DailyReport): Promise<void> {
     if (report.user_id !== userId) {
       throw new Error('Reporting store tenant mismatch.');

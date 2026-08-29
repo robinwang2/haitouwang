@@ -14,6 +14,7 @@ export interface ApplicationIdempotencyRecord {
 }
 
 export interface ApplicationReceiptRecord {
+  receipt_id: string;
   request_hash: string;
   response: RecordedApplicationReceipt;
 }
@@ -21,11 +22,8 @@ export interface ApplicationReceiptRecord {
 /**
  * Persistence boundary for the Application aggregate (applications, manual tasks,
  * mutation idempotency records, agent receipt idempotency records, and the audit trail).
- * Every operation is tenant-scoped by user_id. This models the durable replacement for
- * applications.service.ts's in-process Maps; applications.service.ts is not wired to this
- * interface (its state machine and evidence gating stay untouched and keep using their own
- * private Maps synchronously), matching the pattern already established for
- * MaterialsStore/ReviewStore in HW-13.
+ * Every operation is tenant-scoped by user_id. The service keeps state-machine and evidence
+ * decisions while all aggregate state is read and written through this boundary.
  *
  * submissionKeys (the service's `${userId}:${submission_idempotency_key}` -> application id
  * index) has no dedicated method here: the submission key already lives on Application itself,
@@ -58,8 +56,8 @@ export interface ApplicationsStore {
     record: ApplicationIdempotencyRecord,
   ): Promise<void>;
 
-  getReceipt(userId: string, receiptId: string): Promise<ApplicationReceiptRecord | undefined>;
-  saveReceipt(userId: string, receiptId: string, record: ApplicationReceiptRecord): Promise<void>;
+  getReceipt(userId: string, receiptKey: string): Promise<ApplicationReceiptRecord | undefined>;
+  saveReceipt(userId: string, receiptKey: string, record: ApplicationReceiptRecord): Promise<void>;
 
   appendAuditEvent(userId: string, event: ApplicationAuditEvent): Promise<void>;
   listAuditEvents(userId: string): Promise<ApplicationAuditEvent[]>;

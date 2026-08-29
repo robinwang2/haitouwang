@@ -120,6 +120,8 @@ describe('InMemoryReportingStore', () => {
     await store.saveReport(USER_ID, dailyReport());
 
     expect(await store.getReport(USER_ID, '2026-07-31', 'UTC')).toEqual(dailyReport());
+    expect(await store.getReportById(USER_ID, dailyReport().id)).toEqual(dailyReport());
+    expect(await store.getReportById(OTHER_USER_ID, dailyReport().id)).toBeUndefined();
     expect(await store.getReport(OTHER_USER_ID, '2026-07-31', 'UTC')).toBeUndefined();
     expect(await store.getReport(USER_ID, '2026-08-01', 'UTC')).toBeUndefined();
   });
