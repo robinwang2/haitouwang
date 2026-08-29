@@ -4,6 +4,7 @@ export { JOBS_STORE } from './job-store.interface';
 export type { JobListFilter, JobStore } from './job-store.interface';
 export { InMemoryJobStore } from './job.store';
 export { PostgresJobStore } from './job.postgres-store';
+export { JobController } from './job.controller';
 export { JobService } from './job.service';
 export { JobsModule } from './jobs.module';
 export {
