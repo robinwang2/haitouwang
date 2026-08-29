@@ -22,9 +22,7 @@ export class UserController {
   ) {}
 
   @Get('me')
-  public async getCurrentUser(
-    @CurrentUser() principal: AuthenticatedPrincipal,
-  ): Promise<User> {
+  public async getCurrentUser(@CurrentUser() principal: AuthenticatedPrincipal): Promise<User> {
     try {
       return await this.users.getCurrentUser(principal.userId);
     } catch (error) {
