@@ -29,9 +29,10 @@ export class BearerAuthGuard implements CanActivate {
       return true;
     } catch (error) {
       if (!(error instanceof AuthError)) throw error;
-      // FORBIDDEN means the token is well-formed but its claims are not accepted
-      // (e.g. wrong audience) - distinct from "no/invalid credentials" (401).
-      throw httpError(error.code === 'FORBIDDEN' ? 403 : 401, error.code, error.message);
+      // RFC 6750: every invalid_token condition - bad signature, expiry, wrong
+      // audience/claims - is a 401, never a 403. 403 would mean "your credentials
+      // are fine but you're not allowed"; a rejected token is never "fine".
+      throw httpError(401, error.code, error.message);
     }
   }
 }

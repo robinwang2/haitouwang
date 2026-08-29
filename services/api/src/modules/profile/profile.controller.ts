@@ -50,8 +50,10 @@ interface CursorPage<T> {
 }
 
 /**
- * Profile endpoints (users/goals/facts). Every route is UserBearer-guarded and derives
- * user_id exclusively from the authenticated principal - never from @Body()/@Query().
+ * Profile endpoints (goals/facts). GET /v1/users/me is out of scope for this ticket - the
+ * repo has no persisted `users` aggregate, so it belongs to a follow-up ticket that adds one.
+ * Every route here is UserBearer-guarded and derives user_id exclusively from the
+ * authenticated principal - never from @Body()/@Query().
  */
 @Controller('v1')
 @UseGuards(BearerAuthGuard)
@@ -60,26 +62,6 @@ export class ProfileController {
     @Inject(ProfileService)
     private readonly profile: ProfileService,
   ) {}
-
-  @Get('users/me')
-  public getCurrentUser(@CurrentUser() principal: AuthenticatedPrincipal) {
-    // This repo has no persisted `users` aggregate yet (no migration exists for it, and
-    // adding one is outside this ticket's write scope - see the delivery receipt). Until a
-    // real User store exists, this returns a contract-shaped stub derived only from the
-    // authenticated principal; email/display_name/locale/time_zone/timestamps are placeholders.
-    const now = new Date().toISOString();
-    return {
-      id: principal.userId,
-      email: `${principal.userId}@users.invalid`,
-      display_name: principal.userId,
-      locale: 'en-US',
-      time_zone: 'Etc/UTC',
-      status: 'active' as const,
-      version: 1,
-      created_at: now,
-      updated_at: now,
-    };
-  }
 
   @Get('goals')
   public async listGoals(

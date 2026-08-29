@@ -46,6 +46,11 @@ function signToken(userId: string, permissions: string[] = []): string {
   return signClaims({ sub: userId, aud: TEST_AUDIENCE, iat: now, exp: now + 300, permissions });
 }
 
+function signTokenWithAudience(userId: string, audience: string): string {
+  const now = Math.floor(Date.now() / 1000);
+  return signClaims({ sub: userId, aud: audience, iat: now, exp: now + 300, permissions: [] });
+}
+
 function goalBody(overrides: Record<string, unknown> = {}) {
   return {
     name: 'Backend roles',
@@ -101,7 +106,6 @@ describe('ProfileController HTTP surface', () => {
   });
 
   const ENDPOINTS: Array<{ method: 'GET' | 'POST'; path: string }> = [
-    { method: 'GET', path: '/v1/users/me' },
     { method: 'GET', path: '/v1/goals' },
     { method: 'POST', path: '/v1/goals' },
     { method: 'GET', path: '/v1/facts' },
@@ -133,15 +137,32 @@ describe('ProfileController HTTP surface', () => {
     expect(body).toMatchObject({ error: { code: 'AUTH_REQUIRED' } });
   });
 
-  it('returns a contract-valid current user for GET /v1/users/me', async () => {
-    const userId = randomUUID();
-    const response = await fetch(`${baseUrl}/v1/users/me`, {
-      headers: { authorization: `Bearer ${signToken(userId)}` },
+  it('rejects a well-formed token with the wrong audience as 401, not 403', async () => {
+    // RFC 6750: invalid_token (bad signature, expiry, wrong claims incl. audience) is
+    // always 401. This must not degrade to 403 just because the token parses fine and
+    // only fails the audience check.
+    const response = await fetch(`${baseUrl}/v1/goals`, {
+      headers: { authorization: `Bearer ${signTokenWithAudience(randomUUID(), 'wrong-audience')}` },
     });
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(401);
     const body = await response.json();
-    expectContract('User', body);
-    expect(body).toMatchObject({ id: userId, status: 'active' });
+    expectContract('ErrorEnvelope', body);
+    expect(typeof body.error.code).toBe('string');
+  });
+
+  it('rejects a wrong-audience token on POST /v1/goals as 401, not 403', async () => {
+    const response = await fetch(`${baseUrl}/v1/goals`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${signTokenWithAudience(randomUUID(), 'wrong-audience')}`,
+        'content-type': 'application/json',
+        'idempotency-key': `goal-create-${randomUUID()}`,
+      },
+      body: JSON.stringify(goalBody()),
+    });
+    expect(response.status).toBe(401);
+    const body = await response.json();
+    expectContract('ErrorEnvelope', body);
   });
 
   it('creates and lists goals scoped to the authenticated tenant only', async () => {
@@ -226,6 +247,7 @@ describe('ProfileController HTTP surface', () => {
 
   it('creates and lists facts scoped to the authenticated tenant only', async () => {
     const userId = randomUUID();
+    const otherUserId = randomUUID();
     const token = `Bearer ${signToken(userId)}`;
 
     const createResponse = await fetch(`${baseUrl}/v1/facts`, {
@@ -242,6 +264,16 @@ describe('ProfileController HTTP surface', () => {
     expectContract('Fact', fact);
     expect(fact).toMatchObject({ user_id: userId, kind: 'skill', status: 'pending_confirmation' });
 
+    await fetch(`${baseUrl}/v1/facts`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${signToken(otherUserId)}`,
+        'content-type': 'application/json',
+        'idempotency-key': `fact-create-${randomUUID()}`,
+      },
+      body: JSON.stringify(factBody({ value: { name: 'Other tenant fact' } })),
+    });
+
     const listResponse = await fetch(`${baseUrl}/v1/facts?status=pending_confirmation`, {
       headers: { authorization: token },
     });
@@ -249,6 +281,7 @@ describe('ProfileController HTTP surface', () => {
     const page = await listResponse.json();
     expect(page.items).toHaveLength(1);
     expect(page.items[0]).toMatchObject({ id: fact.id, user_id: userId });
+    expect(page.items.every((item: { user_id: string }) => item.user_id === userId)).toBe(true);
   });
 
   it("returns 404 RESOURCE_NOT_FOUND when a fact scopes itself to another tenant's goal", async () => {
