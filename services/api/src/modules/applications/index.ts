@@ -1,4 +1,5 @@
 export * from './applications-store.interface';
+export * from './applications.controller';
 export * from './applications.errors';
 export * from './applications.module';
 export * from './applications.postgres-store';

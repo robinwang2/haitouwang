@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import type { DynamicModule } from '@nestjs/common';
 
+import { AuthService } from '../../auth.service';
 import { createLazyPostgresStore } from '../../common/lazy-postgres-store';
 import { APPLICATIONS_STORE } from './applications-store.interface';
 import type { ApplicationsStore } from './applications-store.interface';
+import { ApplicationsController } from './applications.controller';
 import { PostgresApplicationsStore } from './applications.postgres-store';
 import { APPLICATION_SERVICE_OPTIONS, ApplicationsService } from './applications.service';
 import type { ApplicationServiceOptions } from './applications.types';
@@ -31,10 +33,12 @@ function createApplicationsStore(): ApplicationsStore {
 }
 
 @Module({
+  controllers: [ApplicationsController],
   providers: [
     { provide: APPLICATION_SERVICE_OPTIONS, useValue: {} },
     ApplicationsService,
     { provide: APPLICATIONS_STORE, useFactory: createApplicationsStore },
+    AuthService,
   ],
   exports: [ApplicationsService, APPLICATIONS_STORE],
 })
