@@ -1,0 +1,346 @@
+{
+  "summary": "2026-08-30 重排版：第一阶段只交付简历生成 MVP —— 输入 JD 文本 + 读取 JSON RAG 文件 → 分析岗位要求 → 召回个人证据 → 生成定制简历 → 校验事实依据 → 单页展示与复制。生成结果默认 review_required，不自动批准、不自动投递。职位发现、智能评审、辅助投递、申请管理与分析保留在后续路线图，不作为本期发布阻塞项。",
+  "tasks": [
+    {
+      "key": "resume_mvp_contract",
+      "title": "锁定内部模型与 API 契约",
+      "role": "integrator",
+      "description": "定义 EvidenceRecord、JD 分析、检索结果、简历 section/claim、引用、warning、生成状态、错误码与幂等语义。外部 JSON 字段仍标为待定，只锁定 Mapper 之后的内部模型。",
+      "doNot": [
+        "不锁定外部 JSON 字段名",
+        "不把临时夹具格式写进对外长期契约"
+      ],
+      "dependsOn": [],
+      "requiredCapabilities": [
+        "coding",
+        "repository-navigation"
+      ],
+      "writeScope": [
+        "contracts/**",
+        "docs/architecture/**"
+      ],
+      "acceptance": [
+        "契约可由标准工具机器校验，退出码为 0",
+        "样例覆盖成功、JSON 无效、无相关事实、模型失败、事实校验失败五种",
+        "EvidenceRecord 至少含 id、kind、content、tags、source、metadata 六个字段"
+      ],
+      "stage": "BUILD",
+      "priority": "P0"
+    },
+    {
+      "key": "resume_mvp_fixtures",
+      "title": "建立临时 JSON 与 JD 黄金样本",
+      "role": "integrator",
+      "description": "造一个正常 JSON、一个缺字段 JSON、一个非法 JSON；JD 覆盖高匹配、部分匹配与无匹配三档。",
+      "doNot": [
+        "夹具里不放真实个人敏感信息",
+        "不把临时 JSON 格式当成正式契约"
+      ],
+      "dependsOn": [
+        "resume_mvp_contract"
+      ],
+      "requiredCapabilities": [
+        "coding",
+        "repository-navigation"
+      ],
+      "writeScope": [
+        "services/api/tests/resume-generation/fixtures/**",
+        "tests/e2e/resume-mvp/fixtures/**"
+      ],
+      "acceptance": [
+        "三份 JSON 夹具与三档 JD 夹具齐备",
+        "每份 JSON 夹具头部标记 provisional",
+        "密钥扫描 security:secrets 退出码为 0"
+      ],
+      "stage": "BUILD",
+      "priority": "P0"
+    },
+    {
+      "key": "json_rag_adapter",
+      "title": "JSON 读取、校验与映射",
+      "role": "backend",
+      "description": "实现 RagSource、RagRecordMapper，含文件大小/编码/JSON 语法检查、重复 ID 检查与内部证据映射。",
+      "doNot": [
+        "不读取任意服务器路径",
+        "不把 JSON 原始字段名透传给下游",
+        "不记录完整简历内容"
+      ],
+      "dependsOn": [
+        "resume_mvp_contract",
+        "resume_mvp_fixtures"
+      ],
+      "requiredCapabilities": [
+        "coding",
+        "backend"
+      ],
+      "writeScope": [
+        "services/api/src/modules/resume-generation/rag/**",
+        "services/api/tests/resume-generation/**"
+      ],
+      "acceptance": [
+        "有效 JSON 映射结果对同一输入稳定",
+        "非法、空、超限、重复 ID 与无法映射的记录各返回一个可读错误码",
+        "检索与生成模块的代码中搜不到外部 JSON 字段名"
+      ],
+      "stage": "BUILD",
+      "priority": "P0"
+    },
+    {
+      "key": "jd_analysis",
+      "title": "把 JD 转成稳定的岗位需求模型",
+      "role": "backend",
+      "description": "提取岗位名称、职责、必备条件、加分项、关键词、职级与语言，并保留原文片段依据。",
+      "doNot": [
+        "不把 JD 文本当指令执行",
+        "不在 JD 为空或超长时继续生成"
+      ],
+      "dependsOn": [
+        "resume_mvp_contract"
+      ],
+      "requiredCapabilities": [
+        "coding",
+        "backend"
+      ],
+      "writeScope": [
+        "services/api/src/modules/resume-generation/jd/**",
+        "services/api/tests/resume-generation/**"
+      ],
+      "acceptance": [
+        "固定 Provider Stub 下同一 JD 的输出逐字相同",
+        "含提示注入语句的 JD 只被当作内容，输出中不出现被注入的指令",
+        "空白与超长 JD 返回契约定义的 4xx 错误码"
+      ],
+      "stage": "BUILD",
+      "priority": "P0"
+    },
+    {
+      "key": "evidence_retrieval",
+      "title": "用 JD 召回个人证据",
+      "role": "backend",
+      "description": "按 JD 关键词、记录类型、标签与必备项覆盖度评分，去重并限制上下文大小，返回分数与命中原因。",
+      "doNot": [
+        "不在空召回时编造证据",
+        "不让关键词堆砌的记录拿到最高分"
+      ],
+      "dependsOn": [
+        "json_rag_adapter",
+        "jd_analysis"
+      ],
+      "requiredCapabilities": [
+        "coding",
+        "backend"
+      ],
+      "writeScope": [
+        "services/api/src/modules/resume-generation/retrieval/**",
+        "services/api/tests/resume-generation/**"
+      ],
+      "acceptance": [
+        "黄金样本中预期经历全部进入 Top-K",
+        "同一输入两次检索结果顺序与分数完全一致",
+        "空召回返回事实不足状态而不是空简历"
+      ],
+      "stage": "BUILD",
+      "priority": "P0"
+    },
+    {
+      "key": "ai_provider_adapter",
+      "title": "可替换的模型调用层",
+      "role": "backend",
+      "description": "统一模型请求、结构化输出、超时、重试、限流，以及模型与 Prompt 版本、token 与成本元数据。测试用本地 Stub。",
+      "doNot": [
+        "业务代码里不出现供应商 SDK 类型",
+        "密钥不进入仓库、响应或日志"
+      ],
+      "dependsOn": [
+        "resume_mvp_contract"
+      ],
+      "requiredCapabilities": [
+        "coding",
+        "backend"
+      ],
+      "writeScope": [
+        "services/api/src/modules/ai/**",
+        "services/api/tests/ai/**"
+      ],
+      "acceptance": [
+        "业务模块中搜不到供应商 SDK 的导入",
+        "模型超时与结构非法各有一条降级测试",
+        "security:secrets 退出码为 0"
+      ],
+      "stage": "BUILD",
+      "priority": "P0"
+    },
+    {
+      "key": "resume_generation_orchestrator",
+      "title": "串起完整生成流程",
+      "role": "backend",
+      "description": "加载 JSON → 分析 JD → 检索 → 构造只含允许证据的 Prompt → 生成结构化简历 → claim 引用校验 → 渲染预览。",
+      "doNot": [
+        "不改公司、学校、职位、时间、技能熟练度与数字成果",
+        "JD 中出现但证据里没有的技能不得写成会"
+      ],
+      "dependsOn": [
+        "evidence_retrieval",
+        "ai_provider_adapter"
+      ],
+      "requiredCapabilities": [
+        "coding",
+        "backend"
+      ],
+      "writeScope": [
+        "services/api/src/modules/resume-generation/**",
+        "services/api/tests/resume-generation/**"
+      ],
+      "acceptance": [
+        "每条事实 claim 至少带一个有效 evidence_id",
+        "引用不存在、结构错误、残留占位符或新增未支持事实时结果不得进入 review_required",
+        "同一幂等键重复请求返回同一 generation_id 且只生成一次"
+      ],
+      "stage": "BUILD",
+      "priority": "P0"
+    },
+    {
+      "key": "claim_verification",
+      "title": "独立事实门禁",
+      "role": "backend",
+      "description": "检查引用存在性、关键实体与日期数字保真、待确认内容与缺失项。验证逻辑不依赖生成模型的自我声明。",
+      "doNot": [
+        "不把模型自评当作校验通过的依据",
+        "证据不足时不自动补写"
+      ],
+      "dependsOn": [
+        "resume_generation_orchestrator"
+      ],
+      "requiredCapabilities": [
+        "coding",
+        "backend"
+      ],
+      "writeScope": [
+        "services/api/src/modules/resume-generation/verification/**",
+        "services/api/tests/resume-generation/**"
+      ],
+      "acceptance": [
+        "公司、日期、技能与量化结果四类篡改样本全部被拦截",
+        "校验代码不调用生成用的 Provider",
+        "证据不足的样本产出 warning 或失败状态，且不出现新增事实"
+      ],
+      "stage": "BUILD",
+      "priority": "P0"
+    },
+    {
+      "key": "resume_generation_api",
+      "title": "单端点生成能力",
+      "role": "backend",
+      "description": "实现 POST /v1/resume-generations：输入校验、统一错误映射与结果返回，复用 common 下的鉴权 Guard 与租户上下文。",
+      "doNot": [
+        "不暴露模型供应商、向量实现或临时 JSON 字段",
+        "不读取任意服务器文件路径"
+      ],
+      "dependsOn": [
+        "claim_verification"
+      ],
+      "requiredCapabilities": [
+        "coding",
+        "backend"
+      ],
+      "writeScope": [
+        "services/api/src/modules/resume-generation/**",
+        "services/api/src/app.module.ts",
+        "services/api/tests/resume-generation/**"
+      ],
+      "acceptance": [
+        "无 Authorization 头请求返回 401",
+        "A 用户读不到 B 用户的生成结果，返回 404 与 RESOURCE_NOT_FOUND",
+        "错误码与契约逐条一致",
+        "npm --prefix tooling run quality 退出码为 0"
+      ],
+      "stage": "BUILD",
+      "priority": "P0"
+    },
+    {
+      "key": "resume_generation_web",
+      "title": "单页生成工作台",
+      "role": "frontend",
+      "description": "JD 输入、JSON 选择或状态展示、生成按钮、加载与错误与空结果、简历预览、证据展开与复制。",
+      "doNot": [
+        "不在前端解析自然语言结果",
+        "不改服务端接口契约"
+      ],
+      "dependsOn": [
+        "resume_generation_api"
+      ],
+      "requiredCapabilities": [
+        "coding",
+        "frontend"
+      ],
+      "writeScope": [
+        "apps/web/src/features/resume-generation/**",
+        "apps/web/src/app/**"
+      ],
+      "acceptance": [
+        "loading、empty、error、permission 四种状态各有对应渲染并有组件测试",
+        "生成中再次点击不会发出第二次请求",
+        "warning 与待人工审核以文本而不只是颜色标注",
+        "页面可用键盘完成一次生成"
+      ],
+      "stage": "BUILD",
+      "priority": "P1"
+    },
+    {
+      "key": "resume_mvp_e2e",
+      "title": "简历 MVP 黑盒验收",
+      "role": "integrator",
+      "description": "用固定 JD 与固定 JSON 走完整闭环，校验结果、引用、错误路径、租户隔离与幂等，产出验收报告。",
+      "doNot": [
+        "不顺手修实现，发现问题写进报告另行提单"
+      ],
+      "dependsOn": [
+        "resume_generation_api",
+        "resume_generation_web"
+      ],
+      "requiredCapabilities": [
+        "coding",
+        "repository-navigation"
+      ],
+      "writeScope": [
+        "tests/e2e/resume-mvp/**",
+        "docs/qa/resume-mvp-report.md"
+      ],
+      "acceptance": [
+        "正常样本一次调用得到可读简历且全部 claim 引用有效",
+        "无相关事实的样本不产出编造内容",
+        "非法 JSON、超限 JSON 与模型故障三条路径各有一个可恢复结果",
+        "报告中每行结果含退出码或测试计数"
+      ],
+      "stage": "BUILD",
+      "priority": "P1"
+    },
+    {
+      "key": "resume_mvp_release",
+      "title": "可运行交付",
+      "role": "integrator",
+      "description": "说明如何配置模型、放置或上传 JSON、启动应用、运行验收与排查常见错误。",
+      "doNot": [
+        "示例配置里不含密钥或真实个人数据"
+      ],
+      "dependsOn": [
+        "resume_mvp_e2e"
+      ],
+      "requiredCapabilities": [
+        "repository-navigation"
+      ],
+      "writeScope": [
+        "README.md",
+        "docs/runbooks/**",
+        "infra/dev/**"
+      ],
+      "acceptance": [
+        "干净环境按文档可完成一次生成",
+        "security:secrets 退出码为 0",
+        "文档中每条命令都标出预期退出码或输出特征"
+      ],
+      "stage": "BUILD",
+      "priority": "P1"
+    }
+  ]
+}
