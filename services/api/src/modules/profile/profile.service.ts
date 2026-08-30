@@ -75,7 +75,11 @@ export class ProfileService {
     private readonly store: ProfileStore,
   ) {}
 
-  async createGoal(userId: string, input: CreateGoalInput, context: MutationContext): Promise<Goal> {
+  async createGoal(
+    userId: string,
+    input: CreateGoalInput,
+    context: MutationContext,
+  ): Promise<Goal> {
     this.validateUserAndContext(userId, context);
     this.validateGoalInput(input);
 
@@ -137,38 +141,46 @@ export class ProfileService {
     this.validateNonEmptyUpdate(input);
     this.validateGoalPatch(input);
 
-    return this.mutate(userId, 'updateGoal', { goalId, expectedVersion, input }, context, async (store) => {
-      const current = await this.requireOwned(userId, goalId, 'goal', () => store.getGoal(userId, goalId));
-      this.assertVersion(current.version, expectedVersion);
-      const now = this.now();
-      const updated: Goal = {
-        ...clone(current),
-        ...clone(input),
-        id: current.id,
-        user_id: current.user_id,
-        version: current.version + 1,
-        created_at: current.created_at,
-        updated_at: now,
-      };
-      await store.saveGoal(userId, updated);
-      await store.appendGoalVersion(userId, {
-        resource_id: updated.id,
-        version: updated.version,
-        recorded_at: now,
-        snapshot: clone(updated),
-      });
-      return {
-        result: updated,
-        audit: {
-          resourceType: 'goal',
-          resourceId: goalId,
-          action: 'goal.updated',
-          changedFields: Object.keys(input),
-          beforeStatus: current.status,
-          afterStatus: updated.status,
-        },
-      };
-    });
+    return this.mutate(
+      userId,
+      'updateGoal',
+      { goalId, expectedVersion, input },
+      context,
+      async (store) => {
+        const current = await this.requireOwned(userId, goalId, 'goal', () =>
+          store.getGoal(userId, goalId),
+        );
+        this.assertVersion(current.version, expectedVersion);
+        const now = this.now();
+        const updated: Goal = {
+          ...clone(current),
+          ...clone(input),
+          id: current.id,
+          user_id: current.user_id,
+          version: current.version + 1,
+          created_at: current.created_at,
+          updated_at: now,
+        };
+        await store.saveGoal(userId, updated);
+        await store.appendGoalVersion(userId, {
+          resource_id: updated.id,
+          version: updated.version,
+          recorded_at: now,
+          snapshot: clone(updated),
+        });
+        return {
+          result: updated,
+          audit: {
+            resourceType: 'goal',
+            resourceId: goalId,
+            action: 'goal.updated',
+            changedFields: Object.keys(input),
+            beforeStatus: current.status,
+            afterStatus: updated.status,
+          },
+        };
+      },
+    );
   }
 
   async deleteGoal(
@@ -179,7 +191,9 @@ export class ProfileService {
   ): Promise<void> {
     this.validateUserAndContext(userId, context);
     await this.mutate(userId, 'deleteGoal', { goalId, expectedVersion }, context, async (store) => {
-      const current = await this.requireOwned(userId, goalId, 'goal', () => store.getGoal(userId, goalId));
+      const current = await this.requireOwned(userId, goalId, 'goal', () =>
+        store.getGoal(userId, goalId),
+      );
       this.assertVersion(current.version, expectedVersion);
       await store.deleteGoal(userId, goalId);
       await store.deleteGoalVersions(userId, goalId);
@@ -203,7 +217,11 @@ export class ProfileService {
     return this.store.listGoalVersions(userId, goalId);
   }
 
-  async createFact(userId: string, input: CreateFactInput, context: MutationContext): Promise<Fact> {
+  async createFact(
+    userId: string,
+    input: CreateFactInput,
+    context: MutationContext,
+  ): Promise<Fact> {
     this.validateUserAndContext(userId, context);
     await this.validateFactInput(this.store, userId, input);
 
@@ -281,58 +299,66 @@ export class ProfileService {
       'fact update',
     );
 
-    return this.mutate(userId, 'updateFact', { factId, expectedVersion, input }, context, async (store) => {
-      const current = await this.requireOwned(userId, factId, 'fact', () => store.getFact(userId, factId));
-      this.assertVersion(current.version, expectedVersion);
-      if (
-        current.status === 'deleted' ||
-        current.status === 'rejected' ||
-        current.status === 'revoked' ||
-        current.status === 'prohibited'
-      ) {
-        throw this.invalidTransition(current.status, 'pending_confirmation');
-      }
-      const merged = { ...clone(current), ...clone(input) };
-      await this.validateFactInput(store, userId, {
-        kind: merged.kind,
-        value: merged.value,
-        scope: merged.scope,
-        source: merged.source,
-        valid_from: merged.valid_from,
-        valid_until: merged.valid_until,
-      });
-      const now = this.now();
-      const status: FactStatus =
-        merged.scope.use === 'prohibited' ? 'prohibited' : 'pending_confirmation';
-      const updated: Fact = {
-        ...merged,
-        id: current.id,
-        user_id: current.user_id,
-        status,
-        version: current.version + 1,
-        created_at: current.created_at,
-        updated_at: now,
-      };
-      delete updated.confirmed_at;
-      await store.saveFact(userId, updated);
-      await store.appendFactVersion(userId, {
-        resource_id: updated.id,
-        version: updated.version,
-        recorded_at: now,
-        snapshot: clone(updated),
-      });
-      return {
-        result: updated,
-        audit: {
-          resourceType: 'fact',
-          resourceId: factId,
-          action: 'profile.fact.updated',
-          changedFields: [...Object.keys(input), 'status'],
-          beforeStatus: current.status,
-          afterStatus: updated.status,
-        },
-      };
-    });
+    return this.mutate(
+      userId,
+      'updateFact',
+      { factId, expectedVersion, input },
+      context,
+      async (store) => {
+        const current = await this.requireOwned(userId, factId, 'fact', () =>
+          store.getFact(userId, factId),
+        );
+        this.assertVersion(current.version, expectedVersion);
+        if (
+          current.status === 'deleted' ||
+          current.status === 'rejected' ||
+          current.status === 'revoked' ||
+          current.status === 'prohibited'
+        ) {
+          throw this.invalidTransition(current.status, 'pending_confirmation');
+        }
+        const merged = { ...clone(current), ...clone(input) };
+        await this.validateFactInput(store, userId, {
+          kind: merged.kind,
+          value: merged.value,
+          scope: merged.scope,
+          source: merged.source,
+          valid_from: merged.valid_from,
+          valid_until: merged.valid_until,
+        });
+        const now = this.now();
+        const status: FactStatus =
+          merged.scope.use === 'prohibited' ? 'prohibited' : 'pending_confirmation';
+        const updated: Fact = {
+          ...merged,
+          id: current.id,
+          user_id: current.user_id,
+          status,
+          version: current.version + 1,
+          created_at: current.created_at,
+          updated_at: now,
+        };
+        delete updated.confirmed_at;
+        await store.saveFact(userId, updated);
+        await store.appendFactVersion(userId, {
+          resource_id: updated.id,
+          version: updated.version,
+          recorded_at: now,
+          snapshot: clone(updated),
+        });
+        return {
+          result: updated,
+          audit: {
+            resourceType: 'fact',
+            resourceId: factId,
+            action: 'profile.fact.updated',
+            changedFields: [...Object.keys(input), 'status'],
+            beforeStatus: current.status,
+            afterStatus: updated.status,
+          },
+        };
+      },
+    );
   }
 
   async confirmFact(
@@ -411,55 +437,63 @@ export class ProfileService {
     context: MutationContext,
   ): Promise<Fact> {
     this.validateUserAndContext(userId, context);
-    return this.mutate(userId, 'deleteFact', { factId, expectedVersion }, context, async (store) => {
-      const current = await this.requireOwned(userId, factId, 'fact', () => store.getFact(userId, factId));
-      this.assertVersion(current.version, expectedVersion);
-      if (current.status === 'deleted') {
-        throw this.invalidTransition('deleted', 'deleted');
-      }
-      const now = this.now();
-      const deleted: Fact = {
-        id: current.id,
-        user_id: current.user_id,
-        kind: current.kind,
-        value: { deleted: true },
-        scope: { use: 'prohibited' },
-        status: 'deleted',
-        source: { type: 'system_rule', reference: 'deleted' },
-        version: current.version + 1,
-        created_at: current.created_at,
-        updated_at: now,
-      };
-      await store.saveFact(userId, deleted);
-      await store.replaceFactVersions(userId, [
-        {
-          resource_id: factId,
-          version: deleted.version,
-          recorded_at: now,
-          snapshot: clone(deleted),
-        },
-      ]);
-      await store.deleteIdempotencyForResource(userId, factId);
-      return {
-        result: deleted,
-        audit: {
-          resourceType: 'fact',
-          resourceId: factId,
-          action: 'profile.fact.deleted',
-          changedFields: [
-            'value',
-            'scope',
-            'source',
-            'valid_from',
-            'valid_until',
-            'confirmed_at',
-            'status',
-          ],
-          beforeStatus: current.status,
-          afterStatus: 'deleted',
-        },
-      };
-    });
+    return this.mutate(
+      userId,
+      'deleteFact',
+      { factId, expectedVersion },
+      context,
+      async (store) => {
+        const current = await this.requireOwned(userId, factId, 'fact', () =>
+          store.getFact(userId, factId),
+        );
+        this.assertVersion(current.version, expectedVersion);
+        if (current.status === 'deleted') {
+          throw this.invalidTransition('deleted', 'deleted');
+        }
+        const now = this.now();
+        const deleted: Fact = {
+          id: current.id,
+          user_id: current.user_id,
+          kind: current.kind,
+          value: { deleted: true },
+          scope: { use: 'prohibited' },
+          status: 'deleted',
+          source: { type: 'system_rule', reference: 'deleted' },
+          version: current.version + 1,
+          created_at: current.created_at,
+          updated_at: now,
+        };
+        await store.saveFact(userId, deleted);
+        await store.replaceFactVersions(userId, [
+          {
+            resource_id: factId,
+            version: deleted.version,
+            recorded_at: now,
+            snapshot: clone(deleted),
+          },
+        ]);
+        await store.deleteIdempotencyForResource(userId, factId);
+        return {
+          result: deleted,
+          audit: {
+            resourceType: 'fact',
+            resourceId: factId,
+            action: 'profile.fact.deleted',
+            changedFields: [
+              'value',
+              'scope',
+              'source',
+              'valid_from',
+              'valid_until',
+              'confirmed_at',
+              'status',
+            ],
+            beforeStatus: current.status,
+            afterStatus: 'deleted',
+          },
+        };
+      },
+    );
   }
 
   async getFactVersions(userId: string, factId: string): Promise<VersionRecord<Fact>[]> {
@@ -468,7 +502,9 @@ export class ProfileService {
   }
 
   async isFactUsable(userId: string, factId: string, goalId?: string): Promise<boolean> {
-    const fact = await this.requireOwned(userId, factId, 'fact', () => this.store.getFact(userId, factId));
+    const fact = await this.requireOwned(userId, factId, 'fact', () =>
+      this.store.getFact(userId, factId),
+    );
     const resolvedGoal = await this.resolveUsableGoal(userId, goalId);
     return this.evaluateFactUsable(fact, resolvedGoal, goalId);
   }
@@ -553,7 +589,9 @@ export class ProfileService {
       { fileId, expectedVersion, scanStatus },
       context,
       async (store) => {
-        const current = await this.requireOwned(userId, fileId, 'file', () => store.getFile(userId, fileId));
+        const current = await this.requireOwned(userId, fileId, 'file', () =>
+          store.getFile(userId, fileId),
+        );
         this.assertVersion(current.version, expectedVersion);
         const now = this.now();
         const updated = {
@@ -604,24 +642,32 @@ export class ProfileService {
     context: MutationContext,
   ): Promise<void> {
     this.validateUserAndContext(userId, context);
-    await this.mutate(userId, 'deleteFileMetadata', { fileId, expectedVersion }, context, async (store) => {
-      const current = await this.requireOwned(userId, fileId, 'file', () => store.getFile(userId, fileId));
-      this.assertVersion(current.version, expectedVersion);
-      await store.deleteFile(userId, fileId);
-      await store.deleteFileVersions(userId, fileId);
-      await store.deleteIdempotencyForResource(userId, fileId);
-      return {
-        result: undefined,
-        audit: {
-          resourceType: 'file',
-          resourceId: fileId,
-          action: 'profile.file.deleted',
-          changedFields: ['deleted'],
-          beforeStatus: current.scan_status,
-          afterStatus: 'deleted',
-        },
-      };
-    });
+    await this.mutate(
+      userId,
+      'deleteFileMetadata',
+      { fileId, expectedVersion },
+      context,
+      async (store) => {
+        const current = await this.requireOwned(userId, fileId, 'file', () =>
+          store.getFile(userId, fileId),
+        );
+        this.assertVersion(current.version, expectedVersion);
+        await store.deleteFile(userId, fileId);
+        await store.deleteFileVersions(userId, fileId);
+        await store.deleteIdempotencyForResource(userId, fileId);
+        return {
+          result: undefined,
+          audit: {
+            resourceType: 'file',
+            resourceId: fileId,
+            action: 'profile.file.deleted',
+            changedFields: ['deleted'],
+            beforeStatus: current.scan_status,
+            afterStatus: 'deleted',
+          },
+        };
+      },
+    );
   }
 
   async listAuditEvents(userId: string): Promise<AuditEvent[]> {
@@ -681,42 +727,50 @@ export class ProfileService {
     confirm = false,
   ): Promise<Fact> {
     this.validateUserAndContext(userId, context);
-    return this.mutate(userId, action, { factId, expectedVersion, target }, context, async (store) => {
-      const current = await this.requireOwned(userId, factId, 'fact', () => store.getFact(userId, factId));
-      this.assertVersion(current.version, expectedVersion);
-      if (!allowedFrom.includes(current.status)) {
-        throw this.invalidTransition(current.status, target);
-      }
-      if (target === 'active' && current.scope.use === 'prohibited') {
-        throw this.invalidTransition(current.status, 'prohibited');
-      }
-      const now = this.now();
-      const updated: Fact = {
-        ...clone(current),
-        status: target,
-        version: current.version + 1,
-        updated_at: now,
-        ...(confirm ? { confirmed_at: now } : {}),
-      };
-      await store.saveFact(userId, updated);
-      await store.appendFactVersion(userId, {
-        resource_id: updated.id,
-        version: updated.version,
-        recorded_at: now,
-        snapshot: clone(updated),
-      });
-      return {
-        result: updated,
-        audit: {
-          resourceType: 'fact',
-          resourceId: factId,
-          action,
-          changedFields: confirm ? ['status', 'confirmed_at'] : ['status'],
-          beforeStatus: current.status,
-          afterStatus: target,
-        },
-      };
-    });
+    return this.mutate(
+      userId,
+      action,
+      { factId, expectedVersion, target },
+      context,
+      async (store) => {
+        const current = await this.requireOwned(userId, factId, 'fact', () =>
+          store.getFact(userId, factId),
+        );
+        this.assertVersion(current.version, expectedVersion);
+        if (!allowedFrom.includes(current.status)) {
+          throw this.invalidTransition(current.status, target);
+        }
+        if (target === 'active' && current.scope.use === 'prohibited') {
+          throw this.invalidTransition(current.status, 'prohibited');
+        }
+        const now = this.now();
+        const updated: Fact = {
+          ...clone(current),
+          status: target,
+          version: current.version + 1,
+          updated_at: now,
+          ...(confirm ? { confirmed_at: now } : {}),
+        };
+        await store.saveFact(userId, updated);
+        await store.appendFactVersion(userId, {
+          resource_id: updated.id,
+          version: updated.version,
+          recorded_at: now,
+          snapshot: clone(updated),
+        });
+        return {
+          result: updated,
+          audit: {
+            resourceType: 'fact',
+            resourceId: factId,
+            action,
+            changedFields: confirm ? ['status', 'confirmed_at'] : ['status'],
+            beforeStatus: current.status,
+            afterStatus: target,
+          },
+        };
+      },
+    );
   }
 
   private async resolveUsableGoal(userId: string, goalId?: string): Promise<Goal | undefined> {
@@ -782,7 +836,11 @@ export class ProfileService {
     });
   }
 
-  private buildAuditEvent(userId: string, context: MutationContext, change: AuditChange): AuditEvent {
+  private buildAuditEvent(
+    userId: string,
+    context: MutationContext,
+    change: AuditChange,
+  ): AuditEvent {
     return {
       event_id: randomUUID(),
       occurred_at: this.now(),
@@ -815,7 +873,11 @@ export class ProfileService {
     return resource;
   }
 
-  private async listGoalsFrom(store: ProfileStore, userId: string, includeArchived = false): Promise<Goal[]> {
+  private async listGoalsFrom(
+    store: ProfileStore,
+    userId: string,
+    includeArchived = false,
+  ): Promise<Goal[]> {
     this.validateUuid(userId, 'user_id');
     return store.listGoals(userId, includeArchived);
   }
@@ -828,7 +890,9 @@ export class ProfileService {
     this.validateUuid(userId, 'user_id');
     const facts = await store.listFacts(userId, filter.include_deleted);
     return facts.filter(
-      (fact) => (!filter.status || fact.status === filter.status) && (!filter.kind || fact.kind === filter.kind),
+      (fact) =>
+        (!filter.status || fact.status === filter.status) &&
+        (!filter.kind || fact.kind === filter.kind),
     );
   }
 

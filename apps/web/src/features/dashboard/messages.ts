@@ -47,13 +47,16 @@ export const dashboardMessages = {
     permissionBody: 'You do not have permission to view these aggregates or open linked records.',
     back: 'Return to sign in',
     confirmPauseTitle: 'Pause all assisted operations?',
-    confirmPauseBody: 'Running assistance will stop safely. Existing history and manual tasks stay available.',
+    confirmPauseBody:
+      'Running assistance will stop safely. Existing history and manual tasks stay available.',
     confirmPause: 'Pause all assistance',
     confirmResumeTitle: 'Resume assisted operations?',
-    confirmResumeBody: 'Job search, material generation, and assisted filling will resume. Automatic submission stays off.',
+    confirmResumeBody:
+      'Job search, material generation, and assisted filling will resume. Automatic submission stays off.',
     confirmResume: 'Resume assisted operations',
     cancel: 'Keep current state',
-    auditRecorded: 'Safety setting updated in the local contract mock. Automatic submission remains off.',
+    auditRecorded:
+      'Safety setting updated in the local contract mock. Automatic submission remains off.',
     readOnly: 'Viewing only. Agent operation permission is required to change this setting.',
     open: 'Open',
     dueToday: 'Due today',

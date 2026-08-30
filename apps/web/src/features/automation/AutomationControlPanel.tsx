@@ -150,7 +150,9 @@ export function AutomationControlPanel({
         <div className={styles.panelHeader}>
           <div>
             <p className={styles.eyebrow}>Automation</p>
-            <h2 className={styles.title} id="automation-title">自动化规则</h2>
+            <h2 className={styles.title} id="automation-title">
+              自动化规则
+            </h2>
           </div>
         </div>
         <p className={styles.notice}>你没有查看自动化设置的权限。</p>
@@ -164,7 +166,9 @@ export function AutomationControlPanel({
       <div className={styles.panelHeader}>
         <div>
           <p className={styles.eyebrow}>Automation guardrails</p>
-          <h2 className={styles.title} id="automation-title">自动化规则与限额</h2>
+          <h2 className={styles.title} id="automation-title">
+            自动化规则与限额
+          </h2>
           <p className={styles.subtitle}>
             能力按最小权限独立控制。任何开关或限额变更均先确认影响，再由服务写入审计。
           </p>
@@ -190,7 +194,11 @@ export function AutomationControlPanel({
               </button>
             </div>
           ) : null}
-          {success ? <div className={styles.success} role="status">{success}</div> : null}
+          {success ? (
+            <div className={styles.success} role="status">
+              {success}
+            </div>
+          ) : null}
 
           {snapshot.pause ? (
             <div className={styles.pauseBanner}>
@@ -205,8 +213,7 @@ export function AutomationControlPanel({
                   onClick={() =>
                     setPending({
                       title: '恢复自动化？',
-                      description:
-                        '恢复只解除暂停门禁，不会改变已有能力开关，也不会开启提交能力。',
+                      description: '恢复只解除暂停门禁，不会改变已有能力开关，也不会开启提交能力。',
                       confirmLabel: '确认恢复',
                       change: { kind: 'resume' },
                     })
@@ -322,7 +329,8 @@ export function AutomationControlPanel({
               </div>
             </div>
             <p className={styles.helper}>
-              当前有效单日/单公司交集上限：{effectiveApplicationLimit(limitDraft)}。限额不会绕过人工提交确认。
+              当前有效单日/单公司交集上限：{effectiveApplicationLimit(limitDraft)}
+              。限额不会绕过人工提交确认。
             </p>
             <div className={styles.actionRow}>
               {permission.canOperateAgent && !snapshot.pause ? (
@@ -363,8 +371,7 @@ export function AutomationControlPanel({
                 onClick={() =>
                   setPending({
                     title: '更新执行限额？',
-                    description:
-                      '新限额将影响后续任务调度；正在执行的任务仍受提交前人工确认保护。',
+                    description: '新限额将影响后续任务调度；正在执行的任务仍受提交前人工确认保护。',
                     confirmLabel: '确认并保存限额',
                     change: { kind: 'limits', limits: limitDraft },
                   })

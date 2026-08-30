@@ -91,7 +91,9 @@ function AgentDetails({
     <div className={styles.agentCard}>
       <div className={styles.agentHeader}>
         <div className={styles.agentIdentity}>
-          <span aria-hidden="true" className={styles.agentIcon}>⌁</span>
+          <span aria-hidden="true" className={styles.agentIcon}>
+            ⌁
+          </span>
           <div>
             <h3>{agent.deviceName}</h3>
             <p>本地浏览器代理</p>
@@ -114,7 +116,9 @@ function AgentDetails({
         </div>
         <div className={styles.metaItem}>
           <span>设备公钥指纹</span>
-          <code title={agent.publicKeyThumbprint}>{redactThumbprint(agent.publicKeyThumbprint)}</code>
+          <code title={agent.publicKeyThumbprint}>
+            {redactThumbprint(agent.publicKeyThumbprint)}
+          </code>
         </div>
       </div>
       {agent.pauseReason ? (
@@ -123,16 +127,15 @@ function AgentDetails({
         </p>
       ) : null}
       <div className={styles.scopeList} aria-label="已授权能力">
-        {agent.scopes.map((scope) => <span className={styles.scope} key={scope}>{scope}</span>)}
+        {agent.scopes.map((scope) => (
+          <span className={styles.scope} key={scope}>
+            {scope}
+          </span>
+        ))}
       </div>
       {canManage && agent.status !== 'revoked' ? (
         <div className={styles.agentActions}>
-          <button
-            className={styles.dangerButton}
-            disabled={busy}
-            onClick={onRevoke}
-            type="button"
-          >
+          <button className={styles.dangerButton} disabled={busy} onClick={onRevoke} type="button">
             撤销代理授权
           </button>
         </div>
@@ -285,7 +288,9 @@ export function ConnectionsPanel({
       <div className={styles.panelHeader}>
         <div>
           <p className={styles.eyebrow}>Connections</p>
-          <h2 className={styles.title} id="connections-title">连接总览</h2>
+          <h2 className={styles.title} id="connections-title">
+            连接总览
+          </h2>
           <p className={styles.subtitle}>
             本地代理只接收脱敏命令；招聘网站凭证、Cookie 与验证码始终留在你的设备上。
           </p>
@@ -310,7 +315,11 @@ export function ConnectionsPanel({
           </button>
         </div>
       ) : null}
-      {message ? <div className={styles.success} role="status">{message}</div> : null}
+      {message ? (
+        <div className={styles.success} role="status">
+          {message}
+        </div>
+      ) : null}
 
       {loading ? (
         <>
@@ -331,7 +340,8 @@ export function ConnectionsPanel({
               <div className={styles.emptyAgent}>
                 <h3>尚未连接本地代理</h3>
                 <p>
-                  安装并启动本地代理，然后使用 10 分钟内有效的一次性链接完成配对。没有代理时仍可查看职位与材料。
+                  安装并启动本地代理，然后使用 10
+                  分钟内有效的一次性链接完成配对。没有代理时仍可查看职位与材料。
                 </p>
                 {permission.canManage ? (
                   <button

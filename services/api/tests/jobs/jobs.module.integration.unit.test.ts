@@ -38,9 +38,7 @@ const MIGRATIONS_DIR = path.resolve(
 const SCHEMA_NAME = 'jobs_module_integration_test';
 
 async function migrationUpSql(): Promise<string[]> {
-  const files = (await readdir(MIGRATIONS_DIR))
-    .filter((file) => file.endsWith('.up.sql'))
-    .sort();
+  const files = (await readdir(MIGRATIONS_DIR)).filter((file) => file.endsWith('.up.sql')).sort();
   return Promise.all(files.map((file) => readFile(path.join(MIGRATIONS_DIR, file), 'utf8')));
 }
 
@@ -121,14 +119,20 @@ describe.skipIf(!DATABASE_URL)('JobsModule integration', () => {
     }
   });
 
-  it('fails to compile the module when DATABASE_URL is not set', async () => {
+  it('compiles the module when DATABASE_URL is not set, but fails the first store access', async () => {
     const originalDatabaseUrl = process.env.DATABASE_URL;
     delete process.env.DATABASE_URL;
 
     try {
-      await expect(Test.createTestingModule({ imports: [JobsModule] }).compile()).rejects.toThrow(
-        /DATABASE_URL is not set/,
-      );
+      const unconfiguredModuleRef = await Test.createTestingModule({
+        imports: [JobsModule],
+      }).compile();
+      try {
+        const jobService = unconfiguredModuleRef.get(JobService);
+        await expect(jobService.listJobs()).rejects.toThrow(/DATABASE_URL is not set/);
+      } finally {
+        await unconfiguredModuleRef.close();
+      }
     } finally {
       process.env.DATABASE_URL = originalDatabaseUrl;
     }
@@ -178,9 +182,7 @@ describe.skipIf(!DATABASE_URL)('JobsModule integration', () => {
     const unknownId = randomUUID();
     expect(await jobService.getJob(unknownId)).toBeNull();
 
-    const { rows } = await verificationPool.query('SELECT id FROM jobs WHERE id = $1', [
-      unknownId,
-    ]);
+    const { rows } = await verificationPool.query('SELECT id FROM jobs WHERE id = $1', [unknownId]);
     expect(rows).toHaveLength(0);
   });
 });

@@ -13,10 +13,12 @@ export const profileMessages = {
     retry: 'Retry profile',
     requestLabel: 'Request ID',
     permissionTitle: 'Profile access is unavailable',
-    permissionBody: 'You do not have permission to view this profile. No profile details are shown.',
+    permissionBody:
+      'You do not have permission to view this profile. No profile details are shown.',
     back: 'Return home',
     pausedTitle: 'Profile automation is paused',
-    pausedBody: 'You can review existing facts and resumes, but new generation tasks will not start.',
+    pausedBody:
+      'You can review existing facts and resumes, but new generation tasks will not start.',
     goalHeading: 'Your search target',
     goalName: 'Goal name',
     roleKeywords: 'Role keywords',

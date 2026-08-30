@@ -20,7 +20,10 @@ export interface ApprovalBlocker {
   readonly count: number;
 }
 
-export function getApprovalBlockers(review: ReviewCase, capabilities: ReviewCapabilities): ApprovalBlocker[] {
+export function getApprovalBlockers(
+  review: ReviewCase,
+  capabilities: ReviewCapabilities,
+): ApprovalBlocker[] {
   const blockers: ApprovalBlocker[] = [];
   const mustFixCount = review.findings.filter(
     (finding) => finding.severity === 'must_fix' && finding.status === 'open',
@@ -40,22 +43,49 @@ export function getApprovalBlockers(review: ReviewCase, capabilities: ReviewCapa
       }).length,
     0,
   );
-  const incompleteReviewers = review.reviewerResults.filter((result) => result.status !== 'completed').length;
+  const incompleteReviewers = review.reviewerResults.filter(
+    (result) => result.status !== 'completed',
+  ).length;
 
   if (mustFixCount > 0) {
-    blockers.push({ code: 'MUST_FIX_OPEN', count: mustFixCount, message: `${mustFixCount} 项必须修复问题仍未关闭` });
+    blockers.push({
+      code: 'MUST_FIX_OPEN',
+      count: mustFixCount,
+      message: `${mustFixCount} 项必须修复问题仍未关闭`,
+    });
   }
   if (unansweredCount > 0) {
-    blockers.push({ code: 'REQUIRED_ANSWER_MISSING', count: unansweredCount, message: `${unansweredCount} 个必答问题尚未回答` });
+    blockers.push({
+      code: 'REQUIRED_ANSWER_MISSING',
+      count: unansweredCount,
+      message: `${unansweredCount} 个必答问题尚未回答`,
+    });
   }
   if (invalidEvidenceCount > 0) {
-    blockers.push({ code: 'FACT_EVIDENCE_INVALID', count: invalidEvidenceCount, message: `${invalidEvidenceCount} 条陈述的事实来源未通过复核` });
+    blockers.push({
+      code: 'FACT_EVIDENCE_INVALID',
+      count: invalidEvidenceCount,
+      message: `${invalidEvidenceCount} 条陈述的事实来源未通过复核`,
+    });
   }
-  if (incompleteReviewers > 0 || review.status === 'queued' || review.status === 'running' || review.status === 'failed') {
-    blockers.push({ code: 'REVIEW_INCOMPLETE', count: Math.max(incompleteReviewers, 1), message: '独立评审尚未全部完成' });
+  if (
+    incompleteReviewers > 0 ||
+    review.status === 'queued' ||
+    review.status === 'running' ||
+    review.status === 'failed'
+  ) {
+    blockers.push({
+      code: 'REVIEW_INCOMPLETE',
+      count: Math.max(incompleteReviewers, 1),
+      message: '独立评审尚未全部完成',
+    });
   }
   if (!capabilities.canDecide) {
-    blockers.push({ code: 'DECISION_PERMISSION_REQUIRED', count: 1, message: '当前账号没有批准或拒绝权限' });
+    blockers.push({
+      code: 'DECISION_PERMISSION_REQUIRED',
+      count: 1,
+      message: '当前账号没有批准或拒绝权限',
+    });
   }
   return blockers;
 }
@@ -102,7 +132,12 @@ function rejected(
     accepted: false,
     review,
     error,
-    auditEvent: audit(review, context, { action, outcome: 'rejected', reason_code: reasonCode, changed_fields: [] }),
+    auditEvent: audit(review, context, {
+      action,
+      outcome: 'rejected',
+      reason_code: reasonCode,
+      changed_fields: [],
+    }),
   };
 }
 
@@ -129,7 +164,9 @@ export class InMemoryReviewDecisionGateway implements ReviewDecisionGateway {
     const material = review.materials.find((item) => item.id === materialId);
     const statement = material?.statements.find((item) => item.id === statementId);
     if (!material || !statement || !text.trim()) {
-      return this.record(rejected(review, context, 'review.material_edited', 'VALIDATION_FAILED', '正文不能为空。'));
+      return this.record(
+        rejected(review, context, 'review.material_edited', 'VALIDATION_FAILED', '正文不能为空。'),
+      );
     }
     const nextReview: ReviewCase = {
       ...review,
@@ -169,14 +206,24 @@ export class InMemoryReviewDecisionGateway implements ReviewDecisionGateway {
   ): Promise<DecisionResult> {
     const finding = review.findings.find((item) => item.id === findingId);
     if (!finding || !resolution.trim()) {
-      return this.record(rejected(review, context, 'review.finding_resolved', 'RESOLUTION_REQUIRED', '请关联修订或填写解决说明。'));
+      return this.record(
+        rejected(
+          review,
+          context,
+          'review.finding_resolved',
+          'RESOLUTION_REQUIRED',
+          '请关联修订或填写解决说明。',
+        ),
+      );
     }
     const nextReview: ReviewCase = {
       ...review,
       version: review.version + 1,
       updatedAt: (context.now?.() ?? new Date()).toISOString(),
       findings: review.findings.map((item) =>
-        item.id === findingId ? { ...item, status: 'resolved', resolution: resolution.trim() } : item,
+        item.id === findingId
+          ? { ...item, status: 'resolved', resolution: resolution.trim() }
+          : item,
       ),
     };
     return this.record({
@@ -198,7 +245,15 @@ export class InMemoryReviewDecisionGateway implements ReviewDecisionGateway {
   ): Promise<DecisionResult> {
     const question = review.questions.find((item) => item.id === questionId);
     if (!question || !answer.trim()) {
-      return this.record(rejected(review, context, 'review.question_answered', 'ANSWER_REQUIRED', '请填写问题答案。'));
+      return this.record(
+        rejected(
+          review,
+          context,
+          'review.question_answered',
+          'ANSWER_REQUIRED',
+          '请填写问题答案。',
+        ),
+      );
     }
     const nextReview: ReviewCase = {
       ...review,
@@ -207,11 +262,12 @@ export class InMemoryReviewDecisionGateway implements ReviewDecisionGateway {
       questions: review.questions.map((item) =>
         item.id === questionId ? { ...item, answer: answer.trim() } : item,
       ),
-      evidence: question.evidenceId && question.confirmationAnswer?.trim() === answer.trim()
-        ? review.evidence.map((item) =>
-            item.id === question.evidenceId ? { ...item, state: 'confirmed' } : item,
-          )
-        : review.evidence,
+      evidence:
+        question.evidenceId && question.confirmationAnswer?.trim() === answer.trim()
+          ? review.evidence.map((item) =>
+              item.id === question.evidenceId ? { ...item, state: 'confirmed' } : item,
+            )
+          : review.evidence,
     };
     return this.record({
       accepted: true,
@@ -219,9 +275,10 @@ export class InMemoryReviewDecisionGateway implements ReviewDecisionGateway {
       auditEvent: audit(review, context, {
         action: 'review.question_answered',
         outcome: 'succeeded',
-        changed_fields: question.evidenceId && question.confirmationAnswer?.trim() === answer.trim()
-          ? ['questions.answer', 'evidence.state', 'version']
-          : ['questions.answer', 'version'],
+        changed_fields:
+          question.evidenceId && question.confirmationAnswer?.trim() === answer.trim()
+            ? ['questions.answer', 'evidence.state', 'version']
+            : ['questions.answer', 'version'],
       }),
     });
   }
@@ -234,7 +291,13 @@ export class InMemoryReviewDecisionGateway implements ReviewDecisionGateway {
     const blockers = getApprovalBlockers(review, capabilities);
     if (blockers.length > 0) {
       return this.record(
-        rejected(review, context, 'review.approved', blockers[0].code, blockers.map((item) => item.message).join('；')),
+        rejected(
+          review,
+          context,
+          'review.approved',
+          blockers[0].code,
+          blockers.map((item) => item.message).join('；'),
+        ),
       );
     }
     const nextReview: ReviewCase = {
@@ -265,10 +328,26 @@ export class InMemoryReviewDecisionGateway implements ReviewDecisionGateway {
     context: CommandContext,
   ): Promise<DecisionResult> {
     if (!capabilities.canDecide) {
-      return this.record(rejected(review, context, 'review.rejected', 'DECISION_PERMISSION_REQUIRED', '当前账号没有拒绝权限。'));
+      return this.record(
+        rejected(
+          review,
+          context,
+          'review.rejected',
+          'DECISION_PERMISSION_REQUIRED',
+          '当前账号没有拒绝权限。',
+        ),
+      );
     }
     if (!reason.trim()) {
-      return this.record(rejected(review, context, 'review.rejected', 'REJECTION_REASON_REQUIRED', '请选择拒绝原因。'));
+      return this.record(
+        rejected(
+          review,
+          context,
+          'review.rejected',
+          'REJECTION_REASON_REQUIRED',
+          '请选择拒绝原因。',
+        ),
+      );
     }
     const nextReview: ReviewCase = {
       ...review,
@@ -284,7 +363,9 @@ export class InMemoryReviewDecisionGateway implements ReviewDecisionGateway {
         action: 'review.rejected',
         outcome: 'succeeded',
         reason_code: reason.trim(),
-        changed_fields: note.trim() ? ['status', 'recommendation', 'rejection_note', 'version'] : ['status', 'recommendation', 'version'],
+        changed_fields: note.trim()
+          ? ['status', 'recommendation', 'rejection_note', 'version']
+          : ['status', 'recommendation', 'version'],
         from_status: review.status,
         to_status: 'rejected',
       }),

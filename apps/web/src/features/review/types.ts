@@ -1,11 +1,5 @@
 export type ReviewStatus =
-  | 'queued'
-  | 'running'
-  | 'requires_changes'
-  | 'needs_human'
-  | 'approved'
-  | 'rejected'
-  | 'failed';
+  'queued' | 'running' | 'requires_changes' | 'needs_human' | 'approved' | 'rejected' | 'failed';
 
 export type FindingSeverity = 'info' | 'warning' | 'must_fix';
 export type FindingStatus = 'open' | 'resolved' | 'accepted_risk';
@@ -177,6 +171,16 @@ export interface ReviewDecisionGateway {
     answer: string,
     context: CommandContext,
   ): Promise<DecisionResult>;
-  approve(review: ReviewCase, capabilities: ReviewCapabilities, context: CommandContext): Promise<DecisionResult>;
-  reject(review: ReviewCase, reason: string, note: string, capabilities: ReviewCapabilities, context: CommandContext): Promise<DecisionResult>;
+  approve(
+    review: ReviewCase,
+    capabilities: ReviewCapabilities,
+    context: CommandContext,
+  ): Promise<DecisionResult>;
+  reject(
+    review: ReviewCase,
+    reason: string,
+    note: string,
+    capabilities: ReviewCapabilities,
+    context: CommandContext,
+  ): Promise<DecisionResult>;
 }

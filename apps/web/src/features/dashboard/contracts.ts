@@ -28,9 +28,31 @@ export type Task = {
     | 'send_notification'
     | 'sync_email'
     | 'build_interview_pack';
-  status: 'queued' | 'leased' | 'running' | 'succeeded' | 'failed' | 'requires_human' | 'cancelled' | 'expired';
+  status:
+    | 'queued'
+    | 'leased'
+    | 'running'
+    | 'succeeded'
+    | 'failed'
+    | 'requires_human'
+    | 'cancelled'
+    | 'expired';
   resource: {
-    type: 'user' | 'goal' | 'fact' | 'file' | 'material' | 'job' | 'score' | 'review' | 'agent' | 'application' | 'task' | 'notification' | 'interview' | 'metric';
+    type:
+      | 'user'
+      | 'goal'
+      | 'fact'
+      | 'file'
+      | 'material'
+      | 'job'
+      | 'score'
+      | 'review'
+      | 'agent'
+      | 'application'
+      | 'task'
+      | 'notification'
+      | 'interview'
+      | 'metric';
     id: string;
     version?: number;
   };
@@ -78,7 +100,11 @@ export type Application = {
   status: ApplicationStatus;
   submission_idempotency_key: string;
   evidence: Array<{
-    type: 'confirmation_number' | 'redacted_screenshot' | 'success_page_fingerprint' | 'manual_attestation';
+    type:
+      | 'confirmation_number'
+      | 'redacted_screenshot'
+      | 'success_page_fingerprint'
+      | 'manual_attestation';
     reference?: string;
     captured_at: string;
     target_origin: string;

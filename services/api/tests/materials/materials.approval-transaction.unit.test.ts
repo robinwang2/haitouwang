@@ -1,50 +1,45 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import * as path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-
 import { describe, expect, it } from 'vitest';
 
 import {
-  MaterialsRepository,
+  InMemoryMaterialsStore,
   MaterialsService,
   type Material,
   type MaterialsError,
 } from '../../src/modules/materials';
-import type { Review } from '../../src/modules/review';
+import { InMemoryReviewStore, ReviewService, type Review } from '../../src/modules/review';
 
 import { GOAL_ID, NOW, USER_ID, materialFacts } from './fixtures/material-facts';
 
 describe('server-side material approval gate and transaction', () => {
-  it('rejects a direct approval without a persisted eligible Review and audits the gate', () => {
-    const service = new MaterialsService();
-    const material = generate(service);
+  it('rejects a direct approval without a persisted eligible Review and audits the gate', async () => {
+    const service = createService();
+    const material = await generate(service);
 
-    expect(() => approve(service, material, 'missing-review')).toThrowError(
+    await expect(approve(service, material, 'missing-review')).rejects.toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({ code: 'REVIEW_REQUIRED' }),
     );
-    expect(service.get(USER_ID, material.id)).toMatchObject({
+    expect(await service.get(USER_ID, material.id)).toMatchObject({
       status: 'review_required',
       version: 1,
     });
-    expect(service.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+    expect((await service.getAuditEvents(USER_ID)).at(-1)).toMatchObject({
       action: 'material.approval_rejected',
       outcome: 'rejected',
       reason_code: 'REVIEW_REQUIRED',
     });
   });
 
-  it('rejects a non-approved Review and an open must-fix finding', () => {
-    const service = new MaterialsService();
-    const material = generate(service);
-    service.saveReview(reviewFor(material, 'requires_changes', 'revise'));
+  it('rejects a non-approved Review and an open must-fix finding', async () => {
+    const service = createService();
+    const material = await generate(service);
+    await service.saveReview(reviewFor(material, 'requires_changes', 'revise'));
 
-    expect(() => approve(service, material)).toThrowError(
+    await expect(approve(service, material)).rejects.toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({ code: 'REVIEW_NOT_APPROVED' }),
     );
 
-    const second = generate(service, '30000000-0000-4000-8000-000000000099');
-    service.saveReview(
+    const second = await generate(service, '30000000-0000-4000-8000-000000000099');
+    await service.saveReview(
       reviewFor(second, 'approved', 'approve', [
         {
           id: '70000000-0000-4000-8000-000000000001',
@@ -57,12 +52,12 @@ describe('server-side material approval gate and transaction', () => {
         },
       ]),
     );
-    expect(() => approve(service, second)).toThrowError(
+    await expect(approve(service, second)).rejects.toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({ code: 'REVIEW_HAS_OPEN_MUST_FIX' }),
     );
 
-    const third = generate(service, '30000000-0000-4000-8000-000000000098');
-    service.saveReview(
+    const third = await generate(service, '30000000-0000-4000-8000-000000000098');
+    await service.saveReview(
       reviewFor(third, 'approved', 'approve', [
         {
           id: '70000000-0000-4000-8000-000000000002',
@@ -75,27 +70,26 @@ describe('server-side material approval gate and transaction', () => {
         },
       ]),
     );
-    expect(() => approve(service, third)).toThrowError(
+    await expect(approve(service, third)).rejects.toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({ code: 'REVIEW_STALE' }),
     );
   });
 
-  it('commits material and success audit together while preserving the approved Review', () => {
-    const service = new MaterialsService();
-    const material = generate(service);
-    const review = service.saveReview(reviewFor(material, 'approved', 'approve'));
+  it('commits material and success audit together while preserving the approved Review', async () => {
+    const service = createService();
+    const material = await generate(service);
+    const review = await service.saveReview(reviewFor(material, 'approved', 'approve'));
 
-    const approved = approve(service, material);
+    const approved = await approve(service, material);
 
     expect(approved).toMatchObject({ status: 'approved', version: 2 });
-    expect(service.getReview(USER_ID, review.id)).toEqual(review);
-    expect(service.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+    expect(await service.getReview(USER_ID, review.id)).toEqual(review);
+    expect((await service.getAuditEvents(USER_ID)).at(-1)).toMatchObject({
       action: 'material.approved',
       outcome: 'succeeded',
       material_version: 2,
     });
-
-    expect(() =>
+    await expect(
       service.approve(
         USER_ID,
         approved.id,
@@ -105,123 +99,130 @@ describe('server-side material approval gate and transaction', () => {
         GOAL_ID,
         review.id,
       ),
-    ).toThrowError(expect.objectContaining<Partial<MaterialsError>>({ code: 'REVIEW_STALE' }));
+    ).rejects.toThrowError(
+      expect.objectContaining<Partial<MaterialsError>>({ code: 'REVIEW_STALE' }),
+    );
   });
 
-  it('rejects a finding-free Review after the reviewed material is revised', () => {
-    const service = new MaterialsService();
-    const material = generate(service);
-    const review = service.saveReview(reviewFor(material, 'approved', 'approve'));
-    const revised = service.revise(USER_ID, material.id, material.version, {
+  it('rejects a finding-free Review after the reviewed material is revised', async () => {
+    const service = createService();
+    const material = await generate(service);
+    const review = await service.saveReview(reviewFor(material, 'approved', 'approve'));
+    const revised = await service.revise(USER_ID, material.id, material.version, {
       facts: materialFacts(),
       evaluated_at: NOW,
       goal_id: GOAL_ID,
     });
 
-    expect(() => approve(service, revised, review.id)).toThrowError(
+    await expect(approve(service, revised, review.id)).rejects.toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({ code: 'REVIEW_STALE' }),
     );
-    expect(service.get(USER_ID, material.id)).toEqual(revised);
-    expect(service.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+    expect(await service.get(USER_ID, material.id)).toEqual(revised);
+    expect((await service.getAuditEvents(USER_ID)).at(-1)).toMatchObject({
       action: 'material.approval_rejected',
       reason_code: 'REVIEW_STALE',
     });
   });
 
-  it('rolls back material history, Review and partial audit when the commit fails', () => {
+  it('rolls back material history and partial audit when the approval commit fails', async () => {
     let failApprovalAudit = false;
-    const repository = new MaterialsRepository(':memory:', (kind) => {
-      if (kind === 'audit' && failApprovalAudit) {
-        failApprovalAudit = false;
-        throw new Error('simulated durable audit write failure');
-      }
-    });
-    const service = new MaterialsService(undefined, undefined, repository);
-    const material = generate(service);
-    const review = service.saveReview(reviewFor(material, 'approved', 'approve'));
+    const service = createService(
+      new InMemoryMaterialsStore((kind, value) => {
+        if (
+          kind === 'audit' &&
+          'action' in value &&
+          value.action === 'material.approved' &&
+          failApprovalAudit
+        ) {
+          failApprovalAudit = false;
+          throw new Error('simulated durable audit write failure');
+        }
+      }),
+    );
+    const material = await generate(service);
+    const review = await service.saveReview(reviewFor(material, 'approved', 'approve'));
     failApprovalAudit = true;
 
-    expect(() => approve(service, material)).toThrowError(
+    await expect(approve(service, material)).rejects.toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({ code: 'TRANSACTION_FAILED' }),
     );
 
-    expect(service.get(USER_ID, material.id)).toEqual(material);
-    expect(service.getVersions(USER_ID, material.id)).toEqual([material]);
-    expect(service.getReview(USER_ID, review.id)).toEqual(review);
+    expect(await service.get(USER_ID, material.id)).toEqual(material);
+    expect(await service.getVersions(USER_ID, material.id)).toEqual([material]);
+    expect(await service.getReview(USER_ID, review.id)).toEqual(review);
     expect(
-      service.getAuditEvents(USER_ID).filter((event) => event.action === 'material.approved'),
+      (await service.getAuditEvents(USER_ID)).filter(
+        (event) => event.action === 'material.approved',
+      ),
     ).toEqual([]);
-    expect(service.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+    expect((await service.getAuditEvents(USER_ID)).at(-1)).toMatchObject({
       action: 'material.approval_failed',
       outcome: 'failed',
       reason_code: 'TRANSACTION_FAILED',
     });
   });
 
-  it('audits successful and rejected rejection transitions', () => {
-    const service = new MaterialsService();
-    const material = generate(service);
+  it('audits successful and rejected rejection transitions', async () => {
+    const service = createService();
+    const material = await generate(service);
 
-    const rejected = service.reject(USER_ID, material.id, material.version);
-    expect(service.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+    const rejected = await service.reject(USER_ID, material.id, material.version);
+    expect((await service.getAuditEvents(USER_ID)).at(-1)).toMatchObject({
       action: 'material.rejected',
       outcome: 'succeeded',
     });
 
-    expect(() => service.reject(USER_ID, rejected.id, rejected.version)).toThrowError(
+    await expect(service.reject(USER_ID, rejected.id, rejected.version)).rejects.toThrowError(
       expect.objectContaining<Partial<MaterialsError>>({ code: 'STATE_TRANSITION_INVALID' }),
     );
-    expect(service.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+    expect((await service.getAuditEvents(USER_ID)).at(-1)).toMatchObject({
       action: 'material.rejection_rejected',
       outcome: 'rejected',
       reason_code: 'STATE_TRANSITION_INVALID',
     });
   });
 
-  it('rolls back a rejection after a real SQLite failure and audits the failed attempt', () => {
-    const temporaryDirectory = mkdtempSync(path.join(tmpdir(), 'haitouwang-rejection-'));
-    const databasePath = path.join(temporaryDirectory, 'materials.sqlite');
-    const repository = new MaterialsRepository(databasePath);
-    try {
-      const service = new MaterialsService(undefined, undefined, repository);
-      const material = generate(service);
-      const review = service.saveReview(reviewFor(material, 'approved', 'approve'));
-      const database = new DatabaseSync(databasePath);
-      try {
-        database.exec(`
-          CREATE TRIGGER fail_material_rejection_audit
-          BEFORE INSERT ON material_audit_events
-          WHEN json_extract(NEW.payload, '$.action') = 'material.rejected'
-          BEGIN
-            SELECT RAISE(FAIL, 'simulated durable rejection audit failure');
-          END;
-        `);
-      } finally {
-        database.close();
-      }
+  it('rolls back a rejection after a store failure and audits the failed attempt', async () => {
+    let failRejectionAudit = false;
+    const service = createService(
+      new InMemoryMaterialsStore((kind, value) => {
+        if (
+          kind === 'audit' &&
+          'action' in value &&
+          value.action === 'material.rejected' &&
+          failRejectionAudit
+        ) {
+          failRejectionAudit = false;
+          throw new Error('simulated durable rejection audit failure');
+        }
+      }),
+    );
+    const material = await generate(service);
+    const review = await service.saveReview(reviewFor(material, 'approved', 'approve'));
+    failRejectionAudit = true;
 
-      expect(() => service.reject(USER_ID, material.id, material.version)).toThrowError(
-        expect.objectContaining<Partial<MaterialsError>>({ code: 'TRANSACTION_FAILED' }),
-      );
+    await expect(service.reject(USER_ID, material.id, material.version)).rejects.toThrowError(
+      expect.objectContaining<Partial<MaterialsError>>({ code: 'TRANSACTION_FAILED' }),
+    );
 
-      expect(service.get(USER_ID, material.id)).toEqual(material);
-      expect(service.getVersions(USER_ID, material.id)).toEqual([material]);
-      expect(service.getReview(USER_ID, review.id)).toEqual(review);
-      expect(service.getAuditEvents(USER_ID)).not.toContainEqual(
-        expect.objectContaining({ action: 'material.rejected' }),
-      );
-      expect(service.getAuditEvents(USER_ID).at(-1)).toMatchObject({
-        action: 'material.rejection_failed',
-        outcome: 'failed',
-        reason_code: 'TRANSACTION_FAILED',
-        material_version: material.version,
-      });
-    } finally {
-      repository.onModuleDestroy();
-      rmSync(temporaryDirectory, { recursive: true, force: true });
-    }
+    expect(await service.get(USER_ID, material.id)).toEqual(material);
+    expect(await service.getVersions(USER_ID, material.id)).toEqual([material]);
+    expect(await service.getReview(USER_ID, review.id)).toEqual(review);
+    expect(await service.getAuditEvents(USER_ID)).not.toContainEqual(
+      expect.objectContaining({ action: 'material.rejected' }),
+    );
+    expect((await service.getAuditEvents(USER_ID)).at(-1)).toMatchObject({
+      action: 'material.rejection_failed',
+      outcome: 'failed',
+      reason_code: 'TRANSACTION_FAILED',
+      material_version: material.version,
+    });
   });
 });
+
+function createService(store = new InMemoryMaterialsStore()): MaterialsService {
+  return new MaterialsService(store, new ReviewService(new InMemoryReviewStore()));
+}
 
 function generate(service: MaterialsService, id = '30000000-0000-4000-8000-000000000001') {
   return service.generate({

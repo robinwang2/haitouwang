@@ -1,25 +1,38 @@
 import { Module } from '@nestjs/common';
-import { Pool } from 'pg';
 
+import { AuthService } from '../../auth.service';
+import { createLazyPostgresStore } from '../../common/lazy-postgres-store';
 import { JOBS_STORE } from './job-store.interface';
 import type { JobStore } from './job-store.interface';
+import { JobController } from './job.controller';
 import { JobService } from './job.service';
 import { PostgresJobStore } from './job.postgres-store';
 
 function createJobStore(): JobStore {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error(
-      'DATABASE_URL is not set. JobsModule requires PostgreSQL as the single source of truth ' +
-        'and will not silently fall back to an in-memory store. Set DATABASE_URL to start this module.',
-    );
-  }
-  const pool = new Pool({ connectionString });
-  return new PostgresJobStore(pool);
+  return createLazyPostgresStore<JobStore>(
+    'JobsModule',
+    {
+      withTransaction: true,
+      getJob: true,
+      listJobs: true,
+      saveJob: true,
+      deleteJob: true,
+    },
+    (pool) => new PostgresJobStore(pool),
+  );
 }
 
 @Module({
-  providers: [{ provide: JOBS_STORE, useFactory: createJobStore }, JobService],
+  controllers: [JobController],
+  providers: [
+    { provide: JOBS_STORE, useFactory: createJobStore },
+    JobService,
+    // BearerAuthGuard (used by JobController) depends on AuthService. AppModule also
+    // provides AuthService, but Nest module DI is not ambient across sibling imports, so
+    // this module needs its own instance; AuthService is stateless (reads env at
+    // construction only), so a second instance is safe.
+    AuthService,
+  ],
   exports: [JobService],
 })
 export class JobsModule {}

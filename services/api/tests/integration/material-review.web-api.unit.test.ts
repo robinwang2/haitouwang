@@ -1,11 +1,10 @@
 import { createHmac } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
-import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 
-import { NestFactory, type INestApplication } from '@nestjs/core';
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -13,44 +12,65 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MaterialReviewApi } from '../../../../apps/web/src/features/material-review/api';
 import { AppModule } from '../../src/app.module';
 import {
+  InMemoryMaterialsStore,
+  MATERIALS_STORE,
   MaterialsService,
   type Material,
   type MaterialAuditEvent,
 } from '../../src/modules/materials';
-import type { Review } from '../../src/modules/review';
+import { InMemoryReviewStore, REVIEW_STORE, type Review } from '../../src/modules/review';
 import { GOAL_ID, NOW, USER_ID, materialFacts } from '../materials/fixtures/material-facts';
 
 describe('real Nest HTTP material-review workflow', () => {
   let app: INestApplication;
   let baseUrl: string;
   let materials: MaterialsService;
-  let databasePath: string;
-  let temporaryDirectory: string;
+  let materialsStore: InMemoryMaterialsStore;
+  let reviewStore: InMemoryReviewStore;
+  let failApprovalAudit: boolean;
 
   beforeEach(async () => {
-    temporaryDirectory = mkdtempSync(path.join(tmpdir(), 'haitouwang-materials-'));
-    databasePath = path.join(temporaryDirectory, 'materials.sqlite');
-    process.env.MATERIALS_DATABASE_PATH = databasePath;
     process.env.AUTH_JWT_SECRET = testSecret();
     process.env.AUTH_JWT_AUDIENCE = TEST_AUDIENCE;
-    app = await NestFactory.create(AppModule, { logger: false });
-    await app.listen(0, '127.0.0.1');
-    const address = app.getHttpServer().address() as AddressInfo;
-    baseUrl = `http://127.0.0.1:${address.port}`;
-    materials = app.get(MaterialsService);
+    failApprovalAudit = false;
+    materialsStore = new InMemoryMaterialsStore((kind, value) => {
+      if (
+        kind === 'audit' &&
+        'action' in value &&
+        value.action === 'material.approved' &&
+        failApprovalAudit
+      ) {
+        failApprovalAudit = false;
+        throw new Error('simulated durable audit failure');
+      }
+    });
+    reviewStore = new InMemoryReviewStore();
+    await startApplication();
   });
 
   afterEach(async () => {
     await app.close();
-    delete process.env.MATERIALS_DATABASE_PATH;
     delete process.env.AUTH_JWT_SECRET;
     delete process.env.AUTH_JWT_AUDIENCE;
-    rmSync(temporaryDirectory, { recursive: true, force: true });
   });
 
+  async function startApplication(): Promise<void> {
+    const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(MATERIALS_STORE)
+      .useValue(materialsStore)
+      .overrideProvider(REVIEW_STORE)
+      .useValue(reviewStore)
+      .compile();
+    app = module.createNestApplication({ logger: false });
+    await app.listen(0, '127.0.0.1');
+    const address = app.getHttpServer().address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${address.port}`;
+    materials = app.get(MaterialsService);
+  }
+
   it('enforces unauthenticated, permission, ownership and valid approver paths at HTTP', async () => {
-    const material = seedMaterial(materials);
-    const review = materials.saveReview(approvedReview(material));
+    const material = await seedMaterial(materials);
+    const review = await materials.saveReview(approvedReview(material));
     const viewer = signToken(USER_ID, ['material:read']);
     const otherOwner = signToken('10000000-0000-4000-8000-000000000099', ['material:approve']);
     const approver = signToken(USER_ID, ['material:approve']);
@@ -66,7 +86,7 @@ describe('real Nest HTTP material-review workflow', () => {
     expectContract('Material', approvedBody);
     expect(approvedBody).toMatchObject({ status: 'approved', version: 2 });
     expect(approvedBody).not.toHaveProperty('document');
-    expect(materials.getAuditEvents(USER_ID)).toEqual(
+    expect(await materials.getAuditEvents(USER_ID)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           actor: { type: 'system', id: 'anonymous' },
@@ -97,7 +117,7 @@ describe('real Nest HTTP material-review workflow', () => {
   });
 
   it('rejects a direct HTTP approval when no qualified Review exists', async () => {
-    const material = seedMaterial(materials);
+    const material = await seedMaterial(materials);
     const token = signToken(USER_ID, ['material:approve']);
     const api = new MaterialReviewApi(baseUrl, token);
 
@@ -110,9 +130,9 @@ describe('real Nest HTTP material-review workflow', () => {
   });
 
   it('rejects a finding-free Review after the reviewed material is revised', async () => {
-    const material = seedMaterial(materials);
-    const review = materials.saveReview(approvedReview(material));
-    const revised = materials.revise(USER_ID, material.id, material.version, {
+    const material = await seedMaterial(materials);
+    const review = await materials.saveReview(approvedReview(material));
+    const revised = await materials.revise(USER_ID, material.id, material.version, {
       facts: materialFacts(),
       evaluated_at: NOW,
       goal_id: GOAL_ID,
@@ -131,15 +151,15 @@ describe('real Nest HTTP material-review workflow', () => {
     expect(await response.json()).toMatchObject({
       error: { code: 'PRECONDITION_REQUIRED', retryable: false },
     });
-    expect(materials.get(USER_ID, material.id)).toEqual(revised);
-    expect(materials.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+    expect(await materials.get(USER_ID, material.id)).toEqual(revised);
+    expect((await materials.getAuditEvents(USER_ID)).at(-1)).toMatchObject({
       action: 'material.approval_rejected',
       reason_code: 'REVIEW_STALE',
     });
   });
 
   it('audits an invalid rejection body at the HTTP validation boundary', async () => {
-    const material = seedMaterial(materials);
+    const material = await seedMaterial(materials);
     const response = await fetch(`${baseUrl}/v1/materials/${material.id}/reject`, {
       method: 'POST',
       headers: {
@@ -151,8 +171,8 @@ describe('real Nest HTTP material-review workflow', () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
-    expect(materials.get(USER_ID, material.id)).toEqual(material);
-    expect(materials.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+    expect(await materials.get(USER_ID, material.id)).toEqual(material);
+    expect((await materials.getAuditEvents(USER_ID)).at(-1)).toMatchObject({
       actor: { type: 'user', id: USER_ID },
       action: 'material.rejection_rejected',
       outcome: 'rejected',
@@ -161,8 +181,8 @@ describe('real Nest HTTP material-review workflow', () => {
   });
 
   it('records the actual cross-tenant caller as the rejected audit actor', async () => {
-    const material = seedMaterial(materials);
-    const review = materials.saveReview(approvedReview(material));
+    const material = await seedMaterial(materials);
+    const review = await materials.saveReview(approvedReview(material));
     const otherUserId = '10000000-0000-4000-8000-000000000099';
     const response = await fetch(`${baseUrl}/v1/materials/${material.id}/approve`, {
       method: 'POST',
@@ -187,8 +207,8 @@ describe('real Nest HTTP material-review workflow', () => {
   });
 
   it('covers Web view Review -> resolve must-fix -> approve -> query audit', async () => {
-    const material = seedMaterial(materials);
-    const review = materials.saveReview(reviewWithMustFix(material));
+    const material = await seedMaterial(materials);
+    const review = await materials.saveReview(reviewWithMustFix(material));
     const token = signToken(USER_ID, ['material:approve']);
     const api = new MaterialReviewApi(baseUrl, token);
 
@@ -216,8 +236,8 @@ describe('real Nest HTTP material-review workflow', () => {
   });
 
   it('requires review_id and returns contract-valid error envelopes', async () => {
-    const material = seedMaterial(materials);
-    materials.saveReview(approvedReview(material));
+    const material = await seedMaterial(materials);
+    await materials.saveReview(approvedReview(material));
     const response = await fetch(`${baseUrl}/v1/materials/${material.id}/approve`, {
       method: 'POST',
       headers: {
@@ -238,12 +258,12 @@ describe('real Nest HTTP material-review workflow', () => {
     expect(body).toMatchObject({
       error: { code: 'VALIDATION_FAILED', retryable: false },
     });
-    expect(materials.get(USER_ID, material.id)).toEqual(material);
+    expect(await materials.get(USER_ID, material.id)).toEqual(material);
   });
 
   it('rejects expired, wrong-audience and invalid-signature access tokens', async () => {
-    const material = seedMaterial(materials);
-    const review = materials.saveReview(approvedReview(material));
+    const material = await seedMaterial(materials);
+    const review = await materials.saveReview(approvedReview(material));
     const body = approvalBody(material, review);
     const expired = signToken(USER_ID, ['material:approve'], { expiresInSeconds: -1 });
     const wrongAudience = signToken(USER_ID, ['material:approve'], { audience: 'another-api' });
@@ -273,8 +293,8 @@ describe('real Nest HTTP material-review workflow', () => {
     ['string exp', 'string'],
     ['non-integer exp', 'non-integer'],
   ] as const)('rejects %s at the real HTTP boundary', async (_label, expirationKind) => {
-    const material = seedMaterial(materials);
-    const review = materials.saveReview(approvedReview(material));
+    const material = await seedMaterial(materials);
+    const review = await materials.saveReview(approvedReview(material));
     const now = Math.floor(Date.now() / 1000);
     const expirationClaim =
       expirationKind === 'missing'
@@ -297,8 +317,8 @@ describe('real Nest HTTP material-review workflow', () => {
     const errorBody = await response.json();
     expectContract('ErrorEnvelope', errorBody);
     expect(errorBody).toMatchObject({ error: { code: 'TOKEN_EXPIRED' } });
-    expect(materials.get(USER_ID, material.id)).toEqual(material);
-    expect(materials.getAuditEvents(USER_ID).at(-1)).toMatchObject({
+    expect(await materials.get(USER_ID, material.id)).toEqual(material);
+    expect((await materials.getAuditEvents(USER_ID)).at(-1)).toMatchObject({
       action: 'material.approval_rejected',
       outcome: 'rejected',
       reason_code: 'TOKEN_EXPIRED',
@@ -306,18 +326,9 @@ describe('real Nest HTTP material-review workflow', () => {
   });
 
   it('rolls back durable material and success audit writes after an HTTP persistence failure', async () => {
-    const material = seedMaterial(materials);
-    const review = materials.saveReview(approvedReview(material));
-    const database = new DatabaseSync(databasePath);
-    database.exec(`
-      CREATE TRIGGER fail_material_approval_audit
-      BEFORE INSERT ON material_audit_events
-      WHEN json_extract(NEW.payload, '$.action') = 'material.approved'
-      BEGIN
-        SELECT RAISE(FAIL, 'simulated durable audit failure');
-      END;
-    `);
-    database.close();
+    const material = await seedMaterial(materials);
+    const review = await materials.saveReview(approvedReview(material));
+    failApprovalAudit = true;
 
     const response = await fetch(`${baseUrl}/v1/materials/${material.id}/approve`, {
       method: 'POST',
@@ -332,13 +343,13 @@ describe('real Nest HTTP material-review workflow', () => {
     const body = await response.json();
     expectContract('ErrorEnvelope', body);
     expect(body).toMatchObject({ error: { code: 'INTERNAL_ERROR', retryable: true } });
-    expect(materials.get(USER_ID, material.id)).toEqual(material);
-    expect(materials.getReview(USER_ID, review.id)).toEqual(review);
-    expect(materials.getVersions(USER_ID, material.id)).toEqual([material]);
-    expect(materials.getAuditEvents(USER_ID)).not.toContainEqual(
+    expect(await materials.get(USER_ID, material.id)).toEqual(material);
+    expect(await materials.getReview(USER_ID, review.id)).toEqual(review);
+    expect(await materials.getVersions(USER_ID, material.id)).toEqual([material]);
+    expect(await materials.getAuditEvents(USER_ID)).not.toContainEqual(
       expect.objectContaining({ action: 'material.approved' }),
     );
-    expect(materials.getAuditEvents(USER_ID)).toContainEqual(
+    expect(await materials.getAuditEvents(USER_ID)).toContainEqual(
       expect.objectContaining({
         action: 'material.approval_failed',
         outcome: 'failed',
@@ -348,19 +359,20 @@ describe('real Nest HTTP material-review workflow', () => {
   });
 
   it('persists an atomic approval across an application restart', async () => {
-    const material = seedMaterial(materials);
-    const review = materials.saveReview(approvedReview(material));
+    const material = await seedMaterial(materials);
+    const review = await materials.saveReview(approvedReview(material));
     const api = new MaterialReviewApi(baseUrl, signToken(USER_ID, ['material:approve']));
     await api.approveMaterial(material.id, approvalBody(material, review));
 
     await app.close();
-    app = await NestFactory.create(AppModule, { logger: false });
-    await app.listen(0, '127.0.0.1');
-    materials = app.get(MaterialsService);
+    await startApplication();
 
-    expect(materials.get(USER_ID, material.id)).toMatchObject({ status: 'approved', version: 2 });
-    expect(materials.getReview(USER_ID, review.id)).toEqual(review);
-    expect(materials.getAuditEvents(USER_ID)).toContainEqual(
+    expect(await materials.get(USER_ID, material.id)).toMatchObject({
+      status: 'approved',
+      version: 2,
+    });
+    expect(await materials.getReview(USER_ID, review.id)).toEqual(review);
+    expect(await materials.getAuditEvents(USER_ID)).toContainEqual(
       expect.objectContaining({ action: 'material.approved', outcome: 'succeeded' }),
     );
   });
@@ -412,7 +424,7 @@ function signClaims(claims: Record<string, unknown>): string {
   return `${header}.${payload}.${signature}`;
 }
 
-function seedMaterial(materials: MaterialsService): Material {
+function seedMaterial(materials: MaterialsService): Promise<Material> {
   return materials.generate({
     id: '30000000-0000-4000-8000-000000000001',
     user_id: USER_ID,

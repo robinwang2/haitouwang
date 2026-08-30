@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { Inject, Injectable, Optional } from '@nestjs/common';
 
+import { REPORTING_STORE } from './reporting-store.interface';
+import type { ReportingStore } from './reporting-store.interface';
 import { ReportingError } from './reporting.errors';
 import type {
   DailyReport,
@@ -31,11 +33,6 @@ const CATEGORIES: readonly DailyReportCategory[] = [
   'exceptions',
 ];
 
-interface StoredSourceRecord {
-  hash: string;
-  value: ReportingSourceRecord;
-}
-
 function clone<T>(value: T): T {
   return structuredClone(value);
 }
@@ -62,13 +59,10 @@ function stableValue(value: unknown): unknown {
 export class ReportingService {
   private readonly clock: { now(): Date };
   private readonly idFactory: () => string;
-  private readonly preferences = new Map<string, NotificationPreferences>();
-  private readonly notifications = new Map<string, Notification>();
-  private readonly notificationDedupe = new Map<string, string>();
-  private readonly sourceRecords = new Map<string, StoredSourceRecord>();
-  private readonly reports = new Map<string, DailyReport>();
 
   public constructor(
+    @Inject(REPORTING_STORE)
+    private readonly store: ReportingStore,
     @Optional()
     @Inject(REPORTING_SERVICE_OPTIONS)
     options: ReportingServiceOptions = {},
@@ -77,135 +71,152 @@ export class ReportingService {
     this.idFactory = options.id_factory ?? randomUUID;
   }
 
-  public setNotificationPreferences(
+  public async setNotificationPreferences(
     userId: string,
     preferences: NotificationPreferences,
-  ): NotificationPreferences {
+  ): Promise<NotificationPreferences> {
     this.validateUuid(userId, 'user_id');
     this.validatePreferences(preferences);
-    this.preferences.set(userId, clone(preferences));
+    await this.store.savePreferences(userId, preferences);
     return clone(preferences);
   }
 
-  public getNotificationPreferences(userId: string): NotificationPreferences {
+  public async getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
     this.validateUuid(userId, 'user_id');
-    return clone(this.preferences.get(userId) ?? defaultPreferences());
+    return this.getPreferences(this.store, userId);
   }
 
-  public requestNotification(userId: string, request: NotificationRequest): Notification {
+  public async requestNotification(
+    userId: string,
+    request: NotificationRequest,
+  ): Promise<Notification> {
     this.validateUuid(userId, 'user_id');
     this.validateNotificationRequest(request);
-    const dedupeKey = `${userId}:${request.type}:${request.dedupe_key}`;
-    const priorId = this.notificationDedupe.get(dedupeKey);
-    if (priorId) {
-      const prior = this.notifications.get(priorId);
-      if (!prior)
-        throw new ReportingError('RESOURCE_NOT_FOUND', 'Notification was not found.', 404);
-      if (
-        prior.channel !== request.channel ||
-        hash(prior.source_ref) !== hash(request.source_ref)
-      ) {
+    return this.store.withTransaction(async (store) => {
+      const priorId = await store.findNotificationIdByDedupeKey(
+        userId,
+        request.type,
+        request.dedupe_key,
+      );
+      if (priorId) {
+        const prior = await store.getNotification(userId, priorId);
+        if (!prior)
+          throw new ReportingError('RESOURCE_NOT_FOUND', 'Notification was not found.', 404);
+        if (
+          prior.channel !== request.channel ||
+          hash(prior.source_ref) !== hash(request.source_ref)
+        ) {
+          throw new ReportingError(
+            'IDEMPOTENCY_KEY_REUSED',
+            'The notification dedupe key was reused for a different source or channel.',
+            409,
+          );
+        }
+        return clone(prior);
+      }
+
+      const now = this.clock.now();
+      const preferences = await this.getPreferences(store, userId);
+      const suppressed = this.shouldSuppress(request, preferences, now);
+      const requestedAt = request.scheduled_at ? new Date(request.scheduled_at) : now;
+      const scheduledAt = suppressed
+        ? undefined
+        : nextAllowedInstant(
+            requestedAt > now ? requestedAt : now,
+            preferences.time_zone,
+            preferences.quiet_hours,
+          );
+      const notification: Notification = {
+        id: this.idFactory(),
+        user_id: userId,
+        type: request.type,
+        status: suppressed ? 'suppressed' : 'pending',
+        dedupe_key: request.dedupe_key,
+        channel: request.channel,
+        ...(scheduledAt ? { scheduled_at: scheduledAt.toISOString() } : {}),
+        source_ref: clone(request.source_ref),
+        created_at: now.toISOString(),
+      };
+      await store.saveNotification(userId, notification);
+      await store.saveNotificationDedupe(userId, request.type, request.dedupe_key, notification.id);
+      return notification;
+    });
+  }
+
+  public async markNotificationSent(userId: string, notificationId: string): Promise<Notification> {
+    return this.store.withTransaction(async (store) => {
+      const current = await this.requireNotification(store, userId, notificationId);
+      if (current.status === 'sent') return current;
+      if (current.status !== 'pending') {
         throw new ReportingError(
-          'IDEMPOTENCY_KEY_REUSED',
-          'The notification dedupe key was reused for a different source or channel.',
+          'STATE_TRANSITION_INVALID',
+          `Notification cannot transition from ${current.status} to sent.`,
           409,
         );
       }
-      return clone(prior);
-    }
+      const updated: Notification = {
+        ...current,
+        status: 'sent',
+        sent_at: this.clock.now().toISOString(),
+      };
+      await store.saveNotification(userId, updated);
+      return updated;
+    });
+  }
 
-    const now = this.clock.now();
-    const preferences = this.getNotificationPreferences(userId);
-    const suppressed = this.shouldSuppress(request, preferences, now);
-    const requestedAt = request.scheduled_at ? new Date(request.scheduled_at) : now;
-    const scheduledAt = suppressed
-      ? undefined
-      : nextAllowedInstant(
-          requestedAt > now ? requestedAt : now,
-          preferences.time_zone,
-          preferences.quiet_hours,
+  public async markNotificationFailed(
+    userId: string,
+    notificationId: string,
+  ): Promise<Notification> {
+    return this.store.withTransaction(async (store) => {
+      const current = await this.requireNotification(store, userId, notificationId);
+      if (current.status === 'failed') return current;
+      if (current.status !== 'pending') {
+        throw new ReportingError(
+          'STATE_TRANSITION_INVALID',
+          `Notification cannot transition from ${current.status} to failed.`,
+          409,
         );
-    const notification: Notification = {
-      id: this.idFactory(),
-      user_id: userId,
-      type: request.type,
-      status: suppressed ? 'suppressed' : 'pending',
-      dedupe_key: request.dedupe_key,
-      channel: request.channel,
-      ...(scheduledAt ? { scheduled_at: scheduledAt.toISOString() } : {}),
-      source_ref: clone(request.source_ref),
-      created_at: now.toISOString(),
-    };
-    this.notifications.set(notification.id, clone(notification));
-    this.notificationDedupe.set(dedupeKey, notification.id);
-    return notification;
+      }
+      const updated: Notification = { ...current, status: 'failed' };
+      await store.saveNotification(userId, updated);
+      return updated;
+    });
   }
 
-  public markNotificationSent(userId: string, notificationId: string): Notification {
-    const current = this.requireNotification(userId, notificationId);
-    if (current.status === 'sent') return current;
-    if (current.status !== 'pending') {
-      throw new ReportingError(
-        'STATE_TRANSITION_INVALID',
-        `Notification cannot transition from ${current.status} to sent.`,
-        409,
-      );
-    }
-    const updated: Notification = {
-      ...current,
-      status: 'sent',
-      sent_at: this.clock.now().toISOString(),
-    };
-    this.notifications.set(updated.id, clone(updated));
-    return updated;
+  public async retryNotification(userId: string, notificationId: string): Promise<Notification> {
+    return this.store.withTransaction(async (store) => {
+      const current = await this.requireNotification(store, userId, notificationId);
+      if (current.status !== 'failed') {
+        throw new ReportingError(
+          'STATE_TRANSITION_INVALID',
+          `Notification cannot transition from ${current.status} to pending.`,
+          409,
+        );
+      }
+      const preferences = await this.getPreferences(store, userId);
+      const request: NotificationRequest = {
+        type: current.type,
+        dedupe_key: current.dedupe_key,
+        channel: current.channel,
+        source_ref: current.source_ref,
+      };
+      const now = this.clock.now();
+      const suppressed = this.shouldSuppress(request, preferences, now);
+      const next = nextAllowedInstant(now, preferences.time_zone, preferences.quiet_hours);
+      const updated: Notification = {
+        ...current,
+        status: suppressed ? 'suppressed' : 'pending',
+        ...(suppressed ? {} : { scheduled_at: next.toISOString() }),
+      };
+      await store.saveNotification(userId, updated);
+      return updated;
+    });
   }
 
-  public markNotificationFailed(userId: string, notificationId: string): Notification {
-    const current = this.requireNotification(userId, notificationId);
-    if (current.status === 'failed') return current;
-    if (current.status !== 'pending') {
-      throw new ReportingError(
-        'STATE_TRANSITION_INVALID',
-        `Notification cannot transition from ${current.status} to failed.`,
-        409,
-      );
-    }
-    const updated: Notification = { ...current, status: 'failed' };
-    this.notifications.set(updated.id, clone(updated));
-    return updated;
-  }
-
-  public retryNotification(userId: string, notificationId: string): Notification {
-    const current = this.requireNotification(userId, notificationId);
-    if (current.status !== 'failed') {
-      throw new ReportingError(
-        'STATE_TRANSITION_INVALID',
-        `Notification cannot transition from ${current.status} to pending.`,
-        409,
-      );
-    }
-    const preferences = this.getNotificationPreferences(userId);
-    const request: NotificationRequest = {
-      type: current.type,
-      dedupe_key: current.dedupe_key,
-      channel: current.channel,
-      source_ref: current.source_ref,
-    };
-    const now = this.clock.now();
-    const suppressed = this.shouldSuppress(request, preferences, now);
-    const next = nextAllowedInstant(now, preferences.time_zone, preferences.quiet_hours);
-    const updated: Notification = {
-      ...current,
-      status: suppressed ? 'suppressed' : 'pending',
-      ...(suppressed ? {} : { scheduled_at: next.toISOString() }),
-    };
-    this.notifications.set(updated.id, clone(updated));
-    return updated;
-  }
-
-  public listNotifications(userId: string): Notification[] {
+  public async listNotifications(userId: string): Promise<Notification[]> {
     this.validateUuid(userId, 'user_id');
-    return [...this.notifications.values()]
+    return (await this.store.listNotifications(userId))
       .filter((notification) => notification.user_id === userId)
       .sort((left, right) =>
         `${left.created_at}:${left.id}`.localeCompare(`${right.created_at}:${right.id}`),
@@ -213,8 +224,11 @@ export class ReportingService {
       .map(clone);
   }
 
-  public buildDeliveryPayload(userId: string, notificationId: string): NotificationDeliveryPayload {
-    const notification = this.requireNotification(userId, notificationId);
+  public async buildDeliveryPayload(
+    userId: string,
+    notificationId: string,
+  ): Promise<NotificationDeliveryPayload> {
+    const notification = await this.requireNotification(this.store, userId, notificationId);
     return {
       notification_id: notification.id,
       notification_type: notification.type,
@@ -223,97 +237,112 @@ export class ReportingService {
     };
   }
 
-  public recordSource(record: ReportingSourceRecord): ReportingSourceRecord {
+  public async recordSource(record: ReportingSourceRecord): Promise<ReportingSourceRecord> {
     this.validateSourceRecord(record);
-    const key = `${record.user_id}:${record.record_id}`;
     const recordHash = hash(record);
-    const prior = this.sourceRecords.get(key);
-    if (prior) {
-      if (prior.hash !== recordHash) {
-        throw new ReportingError(
-          'IDEMPOTENCY_KEY_REUSED',
-          'The reporting source record id was reused with different content.',
-          409,
-        );
+    return this.store.withTransaction(async (store) => {
+      const prior = await store.getSourceRecord(record.user_id, record.record_id);
+      if (prior) {
+        if (prior.hash !== recordHash) {
+          throw new ReportingError(
+            'IDEMPOTENCY_KEY_REUSED',
+            'The reporting source record id was reused with different content.',
+            409,
+          );
+        }
+        return clone(prior.value);
       }
-      return clone(prior.value);
-    }
-    this.sourceRecords.set(key, { hash: recordHash, value: clone(record) });
-    return clone(record);
+      await store.saveSourceRecord(record.user_id, record.record_id, {
+        hash: recordHash,
+        value: clone(record),
+      });
+      return clone(record);
+    });
   }
 
-  public generateDailyReport(userId: string, localDate: string, timeZone: string): DailyReport {
+  public async generateDailyReport(
+    userId: string,
+    localDate: string,
+    timeZone: string,
+  ): Promise<DailyReport> {
     this.validateUuid(userId, 'user_id');
     if (!DATE_PATTERN.test(localDate)) throw this.validation('local_date must use YYYY-MM-DD.');
     this.validateTimeZone(timeZone);
-    const reportKey = `${userId}:${localDate}:${timeZone}`;
-    const prior = this.reports.get(reportKey);
-    if (prior) return clone(prior);
+    return this.store.withTransaction(async (store) => {
+      const prior = await store.getReport(userId, localDate, timeZone);
+      if (prior) return clone(prior);
 
-    const selected = [...this.sourceRecords.values()]
-      .map((record) => record.value)
-      .filter(
-        (record) =>
-          record.user_id === userId &&
-          localDateAt(new Date(record.occurred_at), timeZone) === localDate,
-      )
-      .sort((left, right) =>
-        `${left.occurred_at}:${left.record_id}`.localeCompare(
-          `${right.occurred_at}:${right.record_id}`,
-        ),
-      );
-    const sections = Object.fromEntries(
-      CATEGORIES.map((category) => {
-        const records = selected
-          .filter((record) => record.category === category)
-          .map(({ record_id, source_ref, occurred_at, reason_code }) => ({
-            record_id,
-            source_ref: clone(source_ref),
-            occurred_at,
-            ...(reason_code ? { reason_code } : {}),
-          }));
-        const section: DailyReportSection = { count: records.length, records };
-        return [category, section];
-      }),
-    ) as Record<DailyReportCategory, DailyReportSection>;
-    const report: DailyReport = {
-      id: this.idFactory(),
-      user_id: userId,
-      local_date: localDate,
-      time_zone: timeZone,
-      generated_at: this.clock.now().toISOString(),
-      sections,
-      source_record_count: selected.length,
-    };
-    this.reports.set(reportKey, clone(report));
-    return report;
+      const selected = (await store.listSourceRecords(userId))
+        .filter((record) => localDateAt(new Date(record.occurred_at), timeZone) === localDate)
+        .sort((left, right) =>
+          `${left.occurred_at}:${left.record_id}`.localeCompare(
+            `${right.occurred_at}:${right.record_id}`,
+          ),
+        );
+      const sections = Object.fromEntries(
+        CATEGORIES.map((category) => {
+          const records = selected
+            .filter((record) => record.category === category)
+            .map(({ record_id, source_ref, occurred_at, reason_code }) => ({
+              record_id,
+              source_ref: clone(source_ref),
+              occurred_at,
+              ...(reason_code ? { reason_code } : {}),
+            }));
+          const section: DailyReportSection = { count: records.length, records };
+          return [category, section];
+        }),
+      ) as Record<DailyReportCategory, DailyReportSection>;
+      const report: DailyReport = {
+        id: this.idFactory(),
+        user_id: userId,
+        local_date: localDate,
+        time_zone: timeZone,
+        generated_at: this.clock.now().toISOString(),
+        sections,
+        source_record_count: selected.length,
+      };
+      await store.saveReport(userId, report);
+      return report;
+    });
   }
 
-  public getReportSourceRecords(userId: string, reportId: string): ReportingSourceRecord[] {
-    const report = [...this.reports.values()].find(
-      (candidate) => candidate.id === reportId && candidate.user_id === userId,
-    );
+  public async getReportSourceRecords(
+    userId: string,
+    reportId: string,
+  ): Promise<ReportingSourceRecord[]> {
+    const report = await this.store.getReportById(userId, reportId);
     if (!report) throw new ReportingError('RESOURCE_NOT_FOUND', 'Daily report was not found.', 404);
     const ids = new Set(
       Object.values(report.sections).flatMap((section) =>
         section.records.map((record) => record.record_id),
       ),
     );
-    return [...this.sourceRecords.values()]
-      .map((stored) => stored.value)
-      .filter((record) => record.user_id === userId && ids.has(record.record_id))
+    return (await this.store.listSourceRecords(userId))
+      .filter((record) => ids.has(record.record_id))
       .sort((left, right) => left.record_id.localeCompare(right.record_id))
       .map(clone);
   }
 
-  private requireNotification(userId: string, notificationId: string): Notification {
+  private async requireNotification(
+    store: ReportingStore,
+    userId: string,
+    notificationId: string,
+  ): Promise<Notification> {
     this.validateUuid(userId, 'user_id');
     this.validateUuid(notificationId, 'notification_id');
-    const notification = this.notifications.get(notificationId);
-    if (!notification || notification.user_id !== userId) {
+    const notification = await store.getNotification(userId, notificationId);
+    if (!notification) {
       throw new ReportingError('RESOURCE_NOT_FOUND', 'Notification was not found.', 404);
     }
     return clone(notification);
+  }
+
+  private async getPreferences(
+    store: ReportingStore,
+    userId: string,
+  ): Promise<NotificationPreferences> {
+    return clone((await store.getPreferences(userId)) ?? defaultPreferences());
   }
 
   private shouldSuppress(

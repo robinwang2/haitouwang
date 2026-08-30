@@ -1,4 +1,4 @@
-import { Pool, type PoolClient, type QueryResultRow } from 'pg';
+import type { Pool, PoolClient, QueryResultRow } from 'pg';
 
 import type { IdempotencyRecord, ProfileStore } from './profile-store.interface';
 import type { AuditEvent, Fact, FileMetadata, Goal, VersionRecord } from './profile.types';
@@ -99,7 +99,9 @@ function mapGoal(row: GoalRow): Goal {
     created_at: toIso(row.created_at),
     updated_at: toIso(row.updated_at),
     ...(row.salary ? { salary: row.salary } : {}),
-    ...(row.work_authorization_rule ? { work_authorization_rule: row.work_authorization_rule } : {}),
+    ...(row.work_authorization_rule
+      ? { work_authorization_rule: row.work_authorization_rule }
+      : {}),
     ...(row.locale ? { locale: row.locale } : {}),
   };
 }
@@ -258,10 +260,10 @@ export class PostgresProfileStore implements ProfileStore {
   }
 
   async deleteGoal(userId: string, goalId: string): Promise<boolean> {
-    const result = await this.executor.query('DELETE FROM profile_goals WHERE id = $1 AND user_id = $2', [
-      goalId,
-      userId,
-    ]);
+    const result = await this.executor.query(
+      'DELETE FROM profile_goals WHERE id = $1 AND user_id = $2',
+      [goalId, userId],
+    );
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -321,10 +323,10 @@ export class PostgresProfileStore implements ProfileStore {
   }
 
   async deleteFact(userId: string, factId: string): Promise<boolean> {
-    const result = await this.executor.query('DELETE FROM profile_facts WHERE id = $1 AND user_id = $2', [
-      factId,
-      userId,
-    ]);
+    const result = await this.executor.query(
+      'DELETE FROM profile_facts WHERE id = $1 AND user_id = $2',
+      [factId, userId],
+    );
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -375,10 +377,10 @@ export class PostgresProfileStore implements ProfileStore {
   }
 
   async deleteFile(userId: string, fileId: string): Promise<boolean> {
-    const result = await this.executor.query('DELETE FROM profile_files WHERE id = $1 AND user_id = $2', [
-      fileId,
-      userId,
-    ]);
+    const result = await this.executor.query(
+      'DELETE FROM profile_files WHERE id = $1 AND user_id = $2',
+      [fileId, userId],
+    );
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -394,15 +396,21 @@ export class PostgresProfileStore implements ProfileStore {
     this.assertUser(userId, version.snapshot.user_id);
     await this.executor.query(
       'INSERT INTO profile_goal_versions (resource_id, user_id, version, recorded_at, snapshot) VALUES ($1,$2,$3,$4,$5)',
-      [version.resource_id, userId, version.version, version.recorded_at, JSON.stringify(version.snapshot)],
+      [
+        version.resource_id,
+        userId,
+        version.version,
+        version.recorded_at,
+        JSON.stringify(version.snapshot),
+      ],
     );
   }
 
   async deleteGoalVersions(userId: string, goalId: string): Promise<void> {
-    await this.executor.query('DELETE FROM profile_goal_versions WHERE resource_id = $1 AND user_id = $2', [
-      goalId,
-      userId,
-    ]);
+    await this.executor.query(
+      'DELETE FROM profile_goal_versions WHERE resource_id = $1 AND user_id = $2',
+      [goalId, userId],
+    );
   }
 
   async listFactVersions(userId: string, factId: string): Promise<VersionRecord<Fact>[]> {
@@ -417,7 +425,13 @@ export class PostgresProfileStore implements ProfileStore {
     this.assertUser(userId, version.snapshot.user_id);
     await this.executor.query(
       'INSERT INTO profile_fact_versions (resource_id, user_id, version, recorded_at, snapshot) VALUES ($1,$2,$3,$4,$5)',
-      [version.resource_id, userId, version.version, version.recorded_at, JSON.stringify(version.snapshot)],
+      [
+        version.resource_id,
+        userId,
+        version.version,
+        version.recorded_at,
+        JSON.stringify(version.snapshot),
+      ],
     );
   }
 
@@ -425,23 +439,29 @@ export class PostgresProfileStore implements ProfileStore {
     if (versions.length === 0) return;
     versions.forEach((version) => this.assertUser(userId, version.snapshot.user_id));
     const resourceId = versions[0].resource_id;
-    await this.executor.query('DELETE FROM profile_fact_versions WHERE resource_id = $1 AND user_id = $2', [
-      resourceId,
-      userId,
-    ]);
+    await this.executor.query(
+      'DELETE FROM profile_fact_versions WHERE resource_id = $1 AND user_id = $2',
+      [resourceId, userId],
+    );
     for (const version of versions) {
       await this.executor.query(
         'INSERT INTO profile_fact_versions (resource_id, user_id, version, recorded_at, snapshot) VALUES ($1,$2,$3,$4,$5)',
-        [version.resource_id, userId, version.version, version.recorded_at, JSON.stringify(version.snapshot)],
+        [
+          version.resource_id,
+          userId,
+          version.version,
+          version.recorded_at,
+          JSON.stringify(version.snapshot),
+        ],
       );
     }
   }
 
   async deleteFactVersions(userId: string, factId: string): Promise<void> {
-    await this.executor.query('DELETE FROM profile_fact_versions WHERE resource_id = $1 AND user_id = $2', [
-      factId,
-      userId,
-    ]);
+    await this.executor.query(
+      'DELETE FROM profile_fact_versions WHERE resource_id = $1 AND user_id = $2',
+      [factId, userId],
+    );
   }
 
   async listFileVersions(userId: string, fileId: string): Promise<VersionRecord<FileMetadata>[]> {
@@ -456,15 +476,21 @@ export class PostgresProfileStore implements ProfileStore {
     this.assertUser(userId, version.snapshot.user_id);
     await this.executor.query(
       'INSERT INTO profile_file_versions (resource_id, user_id, version, recorded_at, snapshot) VALUES ($1,$2,$3,$4,$5)',
-      [version.resource_id, userId, version.version, version.recorded_at, JSON.stringify(version.snapshot)],
+      [
+        version.resource_id,
+        userId,
+        version.version,
+        version.recorded_at,
+        JSON.stringify(version.snapshot),
+      ],
     );
   }
 
   async deleteFileVersions(userId: string, fileId: string): Promise<void> {
-    await this.executor.query('DELETE FROM profile_file_versions WHERE resource_id = $1 AND user_id = $2', [
-      fileId,
-      userId,
-    ]);
+    await this.executor.query(
+      'DELETE FROM profile_file_versions WHERE resource_id = $1 AND user_id = $2',
+      [fileId, userId],
+    );
   }
 
   async listAuditEvents(userId: string): Promise<AuditEvent[]> {
@@ -544,10 +570,10 @@ export class PostgresProfileStore implements ProfileStore {
   }
 
   async deleteIdempotencyForResource(userId: string, resourceId: string): Promise<void> {
-    await this.executor.query('DELETE FROM profile_idempotency WHERE user_id = $1 AND resource_id = $2', [
-      userId,
-      resourceId,
-    ]);
+    await this.executor.query(
+      'DELETE FROM profile_idempotency WHERE user_id = $1 AND resource_id = $2',
+      [userId, resourceId],
+    );
   }
 
   async deleteIdempotencyForUser(userId: string): Promise<void> {
@@ -555,9 +581,15 @@ export class PostgresProfileStore implements ProfileStore {
   }
 
   async deleteUserData(userId: string): Promise<{ goals: number; facts: number; files: number }> {
-    const goals = await this.executor.query('DELETE FROM profile_goals WHERE user_id = $1', [userId]);
-    const facts = await this.executor.query('DELETE FROM profile_facts WHERE user_id = $1', [userId]);
-    const files = await this.executor.query('DELETE FROM profile_files WHERE user_id = $1', [userId]);
+    const goals = await this.executor.query('DELETE FROM profile_goals WHERE user_id = $1', [
+      userId,
+    ]);
+    const facts = await this.executor.query('DELETE FROM profile_facts WHERE user_id = $1', [
+      userId,
+    ]);
+    const files = await this.executor.query('DELETE FROM profile_files WHERE user_id = $1', [
+      userId,
+    ]);
     await this.executor.query('DELETE FROM profile_goal_versions WHERE user_id = $1', [userId]);
     await this.executor.query('DELETE FROM profile_fact_versions WHERE user_id = $1', [userId]);
     await this.executor.query('DELETE FROM profile_file_versions WHERE user_id = $1', [userId]);

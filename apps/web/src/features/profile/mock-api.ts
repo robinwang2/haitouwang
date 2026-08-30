@@ -79,8 +79,18 @@ export const mockMaterials: CursorPage<Material> = {
       version: 4,
       file_ids: ['50000000-0000-4000-8000-000000000001'],
       fact_citations: [
-        { fact_id: mockFacts.items[0].id, fact_version: 2, claim_path: '/experience/0', status: 'verified' },
-        { fact_id: mockFacts.items[1].id, fact_version: 1, claim_path: '/skills/0', status: 'pending_confirmation' },
+        {
+          fact_id: mockFacts.items[0].id,
+          fact_version: 2,
+          claim_path: '/experience/0',
+          status: 'verified',
+        },
+        {
+          fact_id: mockFacts.items[1].id,
+          fact_version: 1,
+          claim_path: '/skills/0',
+          status: 'pending_confirmation',
+        },
       ],
       created_at: '2026-07-26T15:20:00Z',
       updated_at: '2026-07-28T10:05:00Z',
@@ -93,7 +103,14 @@ export const mockMaterials: CursorPage<Material> = {
       status: 'review_required',
       version: 2,
       file_ids: ['50000000-0000-4000-8000-000000000002'],
-      fact_citations: [{ fact_id: mockFacts.items[0].id, fact_version: 2, claim_path: '/experience/0', status: 'verified' }],
+      fact_citations: [
+        {
+          fact_id: mockFacts.items[0].id,
+          fact_version: 2,
+          claim_path: '/experience/0',
+          status: 'verified',
+        },
+      ],
       created_at: '2026-07-29T18:20:00Z',
       updated_at: '2026-07-30T08:30:00Z',
     },

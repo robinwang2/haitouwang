@@ -18,13 +18,7 @@ export type Goal = {
 };
 
 export type FactStatus =
-  | 'pending_confirmation'
-  | 'active'
-  | 'expired'
-  | 'rejected'
-  | 'revoked'
-  | 'prohibited'
-  | 'deleted';
+  'pending_confirmation' | 'active' | 'expired' | 'rejected' | 'revoked' | 'prohibited' | 'deleted';
 
 export type Fact = {
   id: string;
@@ -47,7 +41,15 @@ export type Fact = {
   };
   status: FactStatus;
   source: {
-    type: 'user' | 'file' | 'greenhouse' | 'lever' | 'company_careers' | 'manual_url' | 'email' | 'system_rule';
+    type:
+      | 'user'
+      | 'file'
+      | 'greenhouse'
+      | 'lever'
+      | 'company_careers'
+      | 'manual_url'
+      | 'email'
+      | 'system_rule';
     reference: string;
     captured_at?: string;
     content_hash?: string;
@@ -65,7 +67,8 @@ export type Material = {
   user_id: string;
   job_id?: string;
   kind: 'resume' | 'cover_letter' | 'open_question_answer' | 'portfolio' | 'other';
-  status: 'draft' | 'generating' | 'review_required' | 'approved' | 'rejected' | 'failed' | 'superseded';
+  status:
+    'draft' | 'generating' | 'review_required' | 'approved' | 'rejected' | 'failed' | 'superseded';
   version: number;
   file_ids: string[];
   fact_citations: Array<{

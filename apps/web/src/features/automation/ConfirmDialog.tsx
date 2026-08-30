@@ -54,11 +54,15 @@ export function ConfirmDialog({
   }
 
   return (
-    <div className={styles.dialogBackdrop} role="presentation" onMouseDown={(event) => {
-      if (event.currentTarget === event.target && !busy) {
-        onCancel();
-      }
-    }}>
+    <div
+      className={styles.dialogBackdrop}
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target && !busy) {
+          onCancel();
+        }
+      }}
+    >
       <section
         aria-describedby={descriptionId}
         aria-labelledby={titleId}

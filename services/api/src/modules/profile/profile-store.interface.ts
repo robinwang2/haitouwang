@@ -40,10 +40,7 @@ export interface ProfileStore {
   replaceFactVersions(userId: string, versions: VersionRecord<Fact>[]): Promise<void>;
   deleteFactVersions(userId: string, factId: string): Promise<void>;
 
-  listFileVersions(
-    userId: string,
-    fileId: string,
-  ): Promise<VersionRecord<FileMetadata>[]>;
+  listFileVersions(userId: string, fileId: string): Promise<VersionRecord<FileMetadata>[]>;
   appendFileVersion(userId: string, version: VersionRecord<FileMetadata>): Promise<void>;
   deleteFileVersions(userId: string, fileId: string): Promise<void>;
 
@@ -64,7 +61,5 @@ export interface ProfileStore {
   deleteIdempotencyForResource(userId: string, resourceId: string): Promise<void>;
   deleteIdempotencyForUser(userId: string): Promise<void>;
 
-  deleteUserData(
-    userId: string,
-  ): Promise<{ goals: number; facts: number; files: number }>;
+  deleteUserData(userId: string): Promise<{ goals: number; facts: number; files: number }>;
 }

@@ -115,17 +115,11 @@ export class InMemoryProfileStore implements ProfileStore {
     if (this.belongsTo(this.factVersions.get(factId), userId)) this.factVersions.delete(factId);
   }
 
-  async listFileVersions(
-    userId: string,
-    fileId: string,
-  ): Promise<VersionRecord<FileMetadata>[]> {
+  async listFileVersions(userId: string, fileId: string): Promise<VersionRecord<FileMetadata>[]> {
     return this.versions(this.fileVersions, userId, fileId);
   }
 
-  async appendFileVersion(
-    userId: string,
-    version: VersionRecord<FileMetadata>,
-  ): Promise<void> {
+  async appendFileVersion(userId: string, version: VersionRecord<FileMetadata>): Promise<void> {
     this.appendVersion(this.fileVersions, userId, version);
   }
 
@@ -174,9 +168,7 @@ export class InMemoryProfileStore implements ProfileStore {
     }
   }
 
-  async deleteUserData(
-    userId: string,
-  ): Promise<{ goals: number; facts: number; files: number }> {
+  async deleteUserData(userId: string): Promise<{ goals: number; facts: number; files: number }> {
     const goalIds = this.ownedIds(this.goals, userId);
     const factIds = this.ownedIds(this.facts, userId);
     const fileIds = this.ownedIds(this.files, userId);
@@ -195,7 +187,10 @@ export class InMemoryProfileStore implements ProfileStore {
     return { goals: goalIds.length, facts: factIds.length, files: fileIds.length };
   }
 
-  private owned<T extends { user_id: string }>(value: T | undefined, userId: string): T | undefined {
+  private owned<T extends { user_id: string }>(
+    value: T | undefined,
+    userId: string,
+  ): T | undefined {
     return value?.user_id === userId ? clone(value) : undefined;
   }
 
@@ -226,7 +221,10 @@ export class InMemoryProfileStore implements ProfileStore {
     return Boolean(versions?.every((version) => version.snapshot.user_id === userId));
   }
 
-  private ownedIds<T extends { user_id: string }>(records: Map<string, T>, userId: string): string[] {
+  private ownedIds<T extends { user_id: string }>(
+    records: Map<string, T>,
+    userId: string,
+  ): string[] {
     return [...records.entries()]
       .filter(([, resource]) => resource.user_id === userId)
       .map(([id]) => id);

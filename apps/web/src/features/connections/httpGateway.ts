@@ -224,18 +224,15 @@ export function createConnectionHttpGateway(
         throw new Error('撤销前必须确认受影响任务。');
       }
       const correlationId = nextCorrelationId();
-      const response = await fetcher(
-        `${baseUrl}/v1/agents/${encodeURIComponent(agentId)}:revoke`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Idempotency-Key': idempotencyKey(),
-            'X-Correlation-Id': correlationId,
-          },
-          signal,
+      const response = await fetcher(`${baseUrl}/v1/agents/${encodeURIComponent(agentId)}:revoke`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Idempotency-Key': idempotencyKey(),
+          'X-Correlation-Id': correlationId,
         },
-      );
+        signal,
+      });
       const body = await readJson<ApiAgent>(response);
       const audit = await readAuditReceipt(
         agentId,

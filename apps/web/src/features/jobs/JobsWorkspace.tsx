@@ -64,12 +64,17 @@ export function JobsWorkspace({
   }
 
   function onListKeyDown(event: KeyboardEvent<HTMLUListElement>) {
-    const index = Math.max(0, visibleJobs.findIndex((job) => job.id === selectedJob?.id));
+    const index = Math.max(
+      0,
+      visibleJobs.findIndex((job) => job.id === selectedJob?.id),
+    );
     const destination = moveJobSelection(index, visibleJobs.length, event.key);
     if (destination === null) return;
     event.preventDefault();
     setSelectedId(visibleJobs[destination].id);
-    document.getElementById(`job-option-${visibleJobs[destination].id}`)?.scrollIntoView({ block: 'nearest' });
+    document
+      .getElementById(`job-option-${visibleJobs[destination].id}`)
+      ?.scrollIntoView({ block: 'nearest' });
   }
 
   if (pageState === 'loading') return <JobsLoading copy={copy} />;
@@ -78,9 +83,19 @@ export function JobsWorkspace({
     return (
       <main className={styles.shell}>
         <section className={styles.statePanel} role="alert">
-          <span className={styles.stateIcon} aria-hidden="true">!</span>
-          <div><h1>{copy.errorTitle}</h1><p>{copy.errorBody}</p><code>{copy.requestId}: {requestId}</code></div>
-          <button className={styles.primaryButton} onClick={onRetry} type="button">{copy.retry}</button>
+          <span className={styles.stateIcon} aria-hidden="true">
+            !
+          </span>
+          <div>
+            <h1>{copy.errorTitle}</h1>
+            <p>{copy.errorBody}</p>
+            <code>
+              {copy.requestId}: {requestId}
+            </code>
+          </div>
+          <button className={styles.primaryButton} onClick={onRetry} type="button">
+            {copy.retry}
+          </button>
         </section>
       </main>
     );
@@ -94,20 +109,41 @@ export function JobsWorkspace({
       {pageState === 'paused' && (
         <aside className={styles.pauseBanner} role="status">
           <span aria-hidden="true">Ⅱ</span>
-          <div><strong>{copy.pausedTitle}</strong><p>{copy.pausedBody}</p></div>
+          <div>
+            <strong>{copy.pausedTitle}</strong>
+            <p>{copy.pausedBody}</p>
+          </div>
         </aside>
       )}
       <header className={styles.hero}>
-        <div><p className={styles.eyebrow}>{copy.eyebrow}</p><h1>{copy.title}</h1><p>{copy.description}</p></div>
-        <button className={styles.primaryButton} onClick={() => setImportOpen(true)} ref={importButtonRef} type="button">
-          <span aria-hidden="true">＋</span>{copy.import}
+        <div>
+          <p className={styles.eyebrow}>{copy.eyebrow}</p>
+          <h1>{copy.title}</h1>
+          <p>{copy.description}</p>
+        </div>
+        <button
+          className={styles.primaryButton}
+          onClick={() => setImportOpen(true)}
+          ref={importButtonRef}
+          type="button"
+        >
+          <span aria-hidden="true">＋</span>
+          {copy.import}
         </button>
       </header>
 
       <section aria-label="Job filters" className={styles.filters}>
         <label className={styles.searchField}>
           <span>{copy.searchLabel}</span>
-          <div><span aria-hidden="true">⌕</span><input onChange={(event) => setQuery(event.target.value)} placeholder={copy.searchPlaceholder} type="search" value={query} /></div>
+          <div>
+            <span aria-hidden="true">⌕</span>
+            <input
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={copy.searchPlaceholder}
+              type="search"
+              value={query}
+            />
+          </div>
         </label>
         <label>
           <span>{copy.matchLabel}</span>
@@ -127,7 +163,11 @@ export function JobsWorkspace({
             <option value="high">{copy.highRisk}</option>
           </select>
         </label>
-        {hasFilters && <button className={styles.clearButton} onClick={clearFilters} type="button">{copy.clear}</button>}
+        {hasFilters && (
+          <button className={styles.clearButton} onClick={clearFilters} type="button">
+            {copy.clear}
+          </button>
+        )}
       </section>
 
       <p aria-live="polite" className={styles.resultCount} role="status">
@@ -139,7 +179,9 @@ export function JobsWorkspace({
           <span aria-hidden="true">⌕</span>
           <h2>{copy.filteredEmptyTitle}</h2>
           <p>{copy.filteredEmptyBody}</p>
-          <button className={styles.secondaryButton} onClick={clearFilters} type="button">{copy.clear}</button>
+          <button className={styles.secondaryButton} onClick={clearFilters} type="button">
+            {copy.clear}
+          </button>
         </section>
       ) : (
         <div className={styles.workspace}>
@@ -165,16 +207,24 @@ export function JobsWorkspace({
                   >
                     <div className={styles.jobTopline}>
                       <span className={styles.source}>{job.source.replace('_', ' ')}</span>
-                      {score && <strong className={`${styles.score} ${styles[matchBand(score.total)]}`}>{score.total}</strong>}
+                      {score && (
+                        <strong className={`${styles.score} ${styles[matchBand(score.total)]}`}>
+                          {score.total}
+                        </strong>
+                      )}
                     </div>
                     <h2>{job.title}</h2>
                     <p className={styles.company}>{job.company}</p>
                     <p className={styles.location}>{job.location}</p>
                     <div className={styles.cardMeta}>
                       {score && <DecisionBadge copy={copy} score={score} />}
-                      <span className={`${styles.riskBadge} ${styles[job.risk.level]}`}>{copy.risk}: {job.risk.level}</span>
+                      <span className={`${styles.riskBadge} ${styles[job.risk.level]}`}>
+                        {copy.risk}: {job.risk.level}
+                      </span>
                     </div>
-                    <p className={styles.sourceCount}>{job.source_refs.length} {copy.merged}</p>
+                    <p className={styles.sourceCount}>
+                      {job.source_refs.length} {copy.merged}
+                    </p>
                   </li>
                 );
               })}
@@ -203,7 +253,9 @@ export function JobsWorkspace({
           onImported={() => setAnnouncement(copy.importAccepted)}
         />
       )}
-      <p className={styles.srOnly} aria-live="polite" role="status">{announcement}</p>
+      <p className={styles.srOnly} aria-live="polite" role="status">
+        {announcement}
+      </p>
     </main>
   );
 }
@@ -226,7 +278,9 @@ function JobDetail({
   onAnnouncement: (message: string) => void;
 }) {
   const allowed = jobCanStartReview(job, score, canEdit, paused);
-  const date = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(job.created_at));
+  const date = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
+    new Date(job.created_at),
+  );
   const strongest = [...score.dimensions].sort((a, b) => b.score - a.score).slice(0, 3);
   const gaps = [...score.dimensions].sort((a, b) => a.score - b.score).slice(0, 2);
 
@@ -234,18 +288,46 @@ function JobDetail({
     <article aria-labelledby="job-detail-title" className={styles.detailPane}>
       <header className={styles.detailHeader}>
         <p className={styles.eyebrow}>{copy.selected}</p>
-        <h2 id="job-detail-title" tabIndex={-1}>{job.title}</h2>
-        <p className={styles.detailCompany}>{job.company} <span>·</span> {job.location}</p>
+        <h2 id="job-detail-title" tabIndex={-1}>
+          {job.title}
+        </h2>
+        <p className={styles.detailCompany}>
+          {job.company} <span>·</span> {job.location}
+        </p>
         <div className={styles.detailScore}>
           <strong>{score.total}</strong>
-          <span>/100<br />{copy[matchBand(score.total) === 'high' ? 'highMatch' : matchBand(score.total) === 'medium' ? 'mediumMatch' : 'lowMatch']}</span>
+          <span>
+            /100
+            <br />
+            {
+              copy[
+                matchBand(score.total) === 'high'
+                  ? 'highMatch'
+                  : matchBand(score.total) === 'medium'
+                    ? 'mediumMatch'
+                    : 'lowMatch'
+              ]
+            }
+          </span>
           <DecisionBadge copy={copy} score={score} />
         </div>
         <dl className={styles.summaryGrid}>
-          <div><dt>{copy.source}</dt><dd>{job.source.replace('_', ' ')}</dd></div>
-          <div><dt>{copy.posted}</dt><dd>{date}</dd></div>
-          <div><dt>{copy.risk}</dt><dd>{job.risk.level}</dd></div>
-          <div><dt>{copy.status}</dt><dd>{job.status.replace('_', ' ')}</dd></div>
+          <div>
+            <dt>{copy.source}</dt>
+            <dd>{job.source.replace('_', ' ')}</dd>
+          </div>
+          <div>
+            <dt>{copy.posted}</dt>
+            <dd>{date}</dd>
+          </div>
+          <div>
+            <dt>{copy.risk}</dt>
+            <dd>{job.risk.level}</dd>
+          </div>
+          <div>
+            <dt>{copy.status}</dt>
+            <dd>{job.status.replace('_', ' ')}</dd>
+          </div>
         </dl>
       </header>
 
@@ -254,14 +336,21 @@ function JobDetail({
         <ul className={styles.gateGrid}>
           {score.hard_gates.map((gate) => (
             <li className={styles[gateTone(gate)]} key={gate.name}>
-              <span aria-hidden="true">{gate.result === 'pass' ? '✓' : gate.result === 'block' ? '×' : '!'}</span>
-              <div><strong>{gate.name.replaceAll('_', ' ')}</strong><small>{gate.result}</small></div>
+              <span aria-hidden="true">
+                {gate.result === 'pass' ? '✓' : gate.result === 'block' ? '×' : '!'}
+              </span>
+              <div>
+                <strong>{gate.name.replaceAll('_', ' ')}</strong>
+                <small>{gate.result}</small>
+              </div>
             </li>
           ))}
         </ul>
         {job.risk.reasons.length > 0 && (
           <ul className={styles.riskReasons}>
-            {job.risk.reasons.map((reason) => <li key={reason}>{reason.replaceAll('_', ' ')}</li>)}
+            {job.risk.reasons.map((reason) => (
+              <li key={reason}>{reason.replaceAll('_', ' ')}</li>
+            ))}
           </ul>
         )}
       </section>
@@ -269,17 +358,35 @@ function JobDetail({
       <div className={styles.explanationGrid}>
         <section className={styles.detailSection}>
           <h3>{copy.strengths}</h3>
-          <ul>{strongest.map((dimension) => <li key={dimension.name}><strong>{dimension.name.replace('_', ' ')}</strong><span>{dimension.score}%</span></li>)}</ul>
+          <ul>
+            {strongest.map((dimension) => (
+              <li key={dimension.name}>
+                <strong>{dimension.name.replace('_', ' ')}</strong>
+                <span>{dimension.score}%</span>
+              </li>
+            ))}
+          </ul>
         </section>
         <section className={styles.detailSection}>
           <h3>{copy.gaps}</h3>
-          <ul>{gaps.map((dimension) => <li key={dimension.name}><strong>{dimension.name.replace('_', ' ')}</strong><span>{dimension.score}%</span></li>)}</ul>
+          <ul>
+            {gaps.map((dimension) => (
+              <li key={dimension.name}>
+                <strong>{dimension.name.replace('_', ' ')}</strong>
+                <span>{dimension.score}%</span>
+              </li>
+            ))}
+          </ul>
         </section>
       </div>
 
       <section className={styles.detailSection}>
         <h3>{copy.strategy}</h3>
-        <ol className={styles.explanations}>{score.explanations.map((explanation) => <li key={explanation}>{explanation}</li>)}</ol>
+        <ol className={styles.explanations}>
+          {score.explanations.map((explanation) => (
+            <li key={explanation}>{explanation}</li>
+          ))}
+        </ol>
       </section>
 
       <section className={styles.detailSection}>
@@ -292,21 +399,42 @@ function JobDetail({
       <section className={styles.detailSection}>
         <h3>{copy.sourceHistory}</h3>
         <ul className={styles.sourceHistory}>
-          {job.source_refs.map((source) => <li key={`${source.type}-${source.reference}`}><span>{source.type}</span><code>{source.reference}</code></li>)}
+          {job.source_refs.map((source) => (
+            <li key={`${source.type}-${source.reference}`}>
+              <span>{source.type}</span>
+              <code>{source.reference}</code>
+            </li>
+          ))}
         </ul>
       </section>
 
       {!canEdit && <p className={styles.readonlyNote}>{copy.readOnly}</p>}
       <footer className={styles.detailActions}>
         <div>
-          <button className={styles.ghostButton} disabled={!canEdit} onClick={() => onAnnouncement(`${copy.save}: ${job.title}`)} type="button">{copy.save}</button>
-          <button className={styles.ghostButton} disabled={!canEdit} type="button">{copy.ignore}</button>
-          <a href={job.canonical_url} rel="noopener noreferrer" target="_blank">{copy.openOriginal}<span aria-hidden="true"> ↗</span></a>
+          <button
+            className={styles.ghostButton}
+            disabled={!canEdit}
+            onClick={() => onAnnouncement(`${copy.save}: ${job.title}`)}
+            type="button"
+          >
+            {copy.save}
+          </button>
+          <button className={styles.ghostButton} disabled={!canEdit} type="button">
+            {copy.ignore}
+          </button>
+          <a href={job.canonical_url} rel="noopener noreferrer" target="_blank">
+            {copy.openOriginal}
+            <span aria-hidden="true"> ↗</span>
+          </a>
         </div>
         {allowed ? (
-          <button className={styles.primaryButton} type="button">{copy.addToReview}</button>
+          <button className={styles.primaryButton} type="button">
+            {copy.addToReview}
+          </button>
         ) : (
-          <button className={styles.warningButton} disabled={!canEdit || paused} type="button">{copy.createManualReview}</button>
+          <button className={styles.warningButton} disabled={!canEdit || paused} type="button">
+            {copy.createManualReview}
+          </button>
         )}
       </footer>
     </article>
@@ -316,11 +444,19 @@ function JobDetail({
 function DecisionBadge({ copy, score }: { copy: JobsCopy; score: Score }) {
   const decision = scoreDecisionLabel(score.decision);
   const label =
-    decision === 'eligible' ? copy.eligible :
-    decision === 'blocked' ? copy.blocked :
-    decision === 'manual' ? copy.manualReview :
-    copy.unknownStatus;
-  return <span className={`${styles.decision} ${styles[decision]}`}><span aria-hidden="true">{decision === 'eligible' ? '✓' : '!'}</span>{label}</span>;
+    decision === 'eligible'
+      ? copy.eligible
+      : decision === 'blocked'
+        ? copy.blocked
+        : decision === 'manual'
+          ? copy.manualReview
+          : copy.unknownStatus;
+  return (
+    <span className={`${styles.decision} ${styles[decision]}`}>
+      <span aria-hidden="true">{decision === 'eligible' ? '✓' : '!'}</span>
+      {label}
+    </span>
+  );
 }
 
 function ImportDialog({
@@ -338,7 +474,9 @@ function ImportDialog({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { cancelRef.current?.focus(); }, []);
+  useEffect(() => {
+    cancelRef.current?.focus();
+  }, []);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -358,16 +496,26 @@ function ImportDialog({
         aria-labelledby="import-title"
         aria-modal="true"
         className={styles.dialog}
-        onKeyDown={(event) => { if (event.key === 'Escape') onClose(); }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') onClose();
+        }}
         role="dialog"
       >
-        <span className={styles.dialogMark} aria-hidden="true">↗</span>
+        <span className={styles.dialogMark} aria-hidden="true">
+          ↗
+        </span>
         <h2 id="import-title">{copy.importTitle}</h2>
         <p id="import-help">{copy.importHelp}</p>
         <form noValidate onSubmit={submit}>
-          {error && <div className={styles.dialogError} ref={errorRef} role="alert" tabIndex={-1}>{copy.urlError}</div>}
+          {error && (
+            <div className={styles.dialogError} ref={errorRef} role="alert" tabIndex={-1}>
+              {copy.urlError}
+            </div>
+          )}
           <label>
-            <span>{copy.urlLabel} · {copy.required}</span>
+            <span>
+              {copy.urlLabel} · {copy.required}
+            </span>
             <input
               aria-describedby={error ? 'job-url-error' : 'import-help'}
               aria-invalid={error}
@@ -394,8 +542,17 @@ function ImportDialog({
             </select>
           </label>
           <div className={styles.dialogActions}>
-            <button className={styles.secondaryButton} onClick={onClose} ref={cancelRef} type="button">{copy.cancel}</button>
-            <button className={styles.primaryButton} type="submit">{copy.importAction}</button>
+            <button
+              className={styles.secondaryButton}
+              onClick={onClose}
+              ref={cancelRef}
+              type="button"
+            >
+              {copy.cancel}
+            </button>
+            <button className={styles.primaryButton} type="submit">
+              {copy.importAction}
+            </button>
           </div>
         </form>
       </div>
@@ -407,9 +564,29 @@ function JobsLoading({ copy }: { copy: JobsCopy }) {
   return (
     <main aria-busy="true" aria-label={copy.loading} className={styles.shell}>
       <span className={styles.srOnly}>{copy.loading}</span>
-      <div className={styles.skeletonHero}><i /><i /><i /></div>
-      <div className={styles.skeletonFilters}><i /><i /><i /></div>
-      <div className={styles.skeletonWorkspace}><div><i /><i /><i /></div><div><i /><i /><i /><i /></div></div>
+      <div className={styles.skeletonHero}>
+        <i />
+        <i />
+        <i />
+      </div>
+      <div className={styles.skeletonFilters}>
+        <i />
+        <i />
+        <i />
+      </div>
+      <div className={styles.skeletonWorkspace}>
+        <div>
+          <i />
+          <i />
+          <i />
+        </div>
+        <div>
+          <i />
+          <i />
+          <i />
+          <i />
+        </div>
+      </div>
     </main>
   );
 }
@@ -425,12 +602,33 @@ function JobsEmpty({ copy }: { copy: JobsCopy }) {
   return (
     <main className={styles.shell}>
       <section className={styles.statePanel}>
-        <span className={styles.emptyIcon} aria-hidden="true">＋</span>
-        <div><p className={styles.eyebrow}>{copy.eyebrow}</p><h1>{copy.emptyTitle}</h1><p>{copy.emptyBody}</p></div>
-        <button className={styles.primaryButton} onClick={() => setOpen(true)} ref={triggerRef} type="button">{copy.import}</button>
+        <span className={styles.emptyIcon} aria-hidden="true">
+          ＋
+        </span>
+        <div>
+          <p className={styles.eyebrow}>{copy.eyebrow}</p>
+          <h1>{copy.emptyTitle}</h1>
+          <p>{copy.emptyBody}</p>
+        </div>
+        <button
+          className={styles.primaryButton}
+          onClick={() => setOpen(true)}
+          ref={triggerRef}
+          type="button"
+        >
+          {copy.import}
+        </button>
       </section>
-      {open && <ImportDialog copy={copy} onClose={close} onImported={() => setAnnouncement(copy.importAccepted)} />}
-      <p className={styles.srOnly} aria-live="polite" role="status">{announcement}</p>
+      {open && (
+        <ImportDialog
+          copy={copy}
+          onClose={close}
+          onImported={() => setAnnouncement(copy.importAccepted)}
+        />
+      )}
+      <p className={styles.srOnly} aria-live="polite" role="status">
+        {announcement}
+      </p>
     </main>
   );
 }
@@ -439,9 +637,16 @@ function JobsPermission({ copy }: { copy: JobsCopy }) {
   return (
     <main className={styles.shell}>
       <section className={styles.statePanel}>
-        <span className={styles.stateIcon} aria-hidden="true">×</span>
-        <div><h1>{copy.permissionTitle}</h1><p>{copy.permissionBody}</p></div>
-        <a className={styles.secondaryButton} href="/">{copy.back}</a>
+        <span className={styles.stateIcon} aria-hidden="true">
+          ×
+        </span>
+        <div>
+          <h1>{copy.permissionTitle}</h1>
+          <p>{copy.permissionBody}</p>
+        </div>
+        <a className={styles.secondaryButton} href="/">
+          {copy.back}
+        </a>
       </section>
     </main>
   );
