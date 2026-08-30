@@ -1,0 +1,26 @@
+{
+  "specversion": "1.0",
+  "id": "20000000-0000-4000-8000-000000000008",
+  "type": "resume_generation.state_changed.v1",
+  "source": "https://api.haitouwang.example/resume-generations",
+  "subject": "resume-generations/a0000000-0000-4000-8000-000000000005",
+  "time": "2026-08-30T18:24:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://contracts.haitouwang.example/events/v1",
+  "tenant_id": "10000000-0000-4000-8000-000000000001",
+  "correlation_id": "40000000-0000-4000-8000-000000000012",
+  "causation_id": "40000000-0000-4000-8000-000000000012",
+  "data": {
+    "resource": {
+      "type": "resume_generation",
+      "id": "a0000000-0000-4000-8000-000000000005"
+    },
+    "from_status": "generating",
+    "to_status": "failed",
+    "reason_code": "RESUME_CLAIM_VERIFICATION_FAILED",
+    "actor": {
+      "type": "service",
+      "id": "claim-verifier"
+    }
+  }
+}

@@ -122,6 +122,16 @@ rescheduled -> confirmed|rescheduled|completed|cancelled
 
 邮件推断只能创建 `tentative`；用户或高置信受控规则确认后才进入 `confirmed`。
 
+### 简历生成
+
+```text
+pending -> generating
+generating -> review_required
+generating -> failed
+```
+
+`review_required` 是唯一成功终态；枚举中不存在任何自动批准态，`approved` 由后续 Materials 审核门禁在独立资源上产生，不属于本状态机。`failed` 覆盖 RAG 源无效、JD 为空/超长、无相关证据和模型调用失败；`generating -> review_required` 之前必须先通过事实引用校验，校验失败同样落在 `failed` 而不是携带未经证实声明的 `review_required`。详见 `docs/architecture/resume-generation-contract.md`。
+
 ## 4. 人工降级原因
 
 稳定原因枚举为：

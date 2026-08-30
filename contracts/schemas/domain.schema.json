@@ -18,7 +18,8 @@
     { "$ref": "#/$defs/Interview" },
     { "$ref": "#/$defs/MetricDefinition" },
     { "$ref": "#/$defs/MetricPoint" },
-    { "$ref": "#/$defs/AuditEvent" }
+    { "$ref": "#/$defs/AuditEvent" },
+    { "$ref": "#/$defs/ResumeGeneration" }
   ],
   "$defs": {
     "Uuid": {
@@ -66,7 +67,8 @@
             "task",
             "notification",
             "interview",
-            "metric"
+            "metric",
+            "resume_generation"
           ]
         },
         "id": { "$ref": "#/$defs/Uuid" },
@@ -184,7 +186,13 @@
         "MANUAL_INTERVENTION_REQUIRED",
         "PAIRING_CODE_INVALID",
         "RATE_LIMITED",
-        "INTERNAL_ERROR"
+        "INTERNAL_ERROR",
+        "RAG_SOURCE_INVALID",
+        "JD_TEXT_EMPTY",
+        "JD_TEXT_TOO_LONG",
+        "RESUME_EVIDENCE_NOT_FOUND",
+        "RESUME_GENERATION_FAILED",
+        "RESUME_CLAIM_VERIFICATION_FAILED"
       ]
     },
     "ErrorEnvelope": {
@@ -1411,6 +1419,321 @@
           "maxLength": 64
         },
         "replayed_from_event_id": { "$ref": "#/$defs/Uuid" }
+      }
+    },
+    "EvidenceSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "reference"],
+      "description": "Where one EvidenceRecord was mapped from. type and reference are RagRecordMapper-assigned labels, not raw external JSON field names.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      }
+    },
+    "EvidenceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "content", "tags", "source", "metadata"],
+      "description": "Stable internal shape produced by RagRecordMapper from a provisional, not-yet-finalized external JSON RAG format (schema_version and field names of that upstream format are undecided). No upstream field name may leak past this shape into retrieval, prompts, claim verification or the UI. id is a mapper-derived identifier, never the raw external record key.",
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Provisional evidence category (e.g. experience, skill, project). Left as an open string until the formal RAG JSON format fixes a canonical taxonomy; see json_schema_followup."
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          }
+        },
+        "source": { "$ref": "#/$defs/EvidenceSource" },
+        "metadata": {
+          "type": "object",
+          "maxProperties": 50,
+          "additionalProperties": true
+        }
+      }
+    },
+    "JdRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "source_excerpt"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "source_excerpt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "Verbatim JD fragment the extraction is grounded in."
+        }
+      }
+    },
+    "JdKeyword": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "category", "source_excerpt"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "enum": ["technical", "business"]
+        },
+        "source_excerpt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "JdAnalysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_title",
+        "responsibilities",
+        "must_have_requirements",
+        "nice_to_have_requirements",
+        "keywords",
+        "seniority_level",
+        "language"
+      ],
+      "properties": {
+        "job_title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "responsibilities": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "#/$defs/JdRequirement" }
+        },
+        "must_have_requirements": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "#/$defs/JdRequirement" }
+        },
+        "nice_to_have_requirements": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "#/$defs/JdRequirement" }
+        },
+        "keywords": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/JdKeyword" }
+        },
+        "seniority_level": {
+          "type": "string",
+          "enum": ["intern", "entry", "mid", "senior", "staff", "principal", "executive", "unknown"]
+        },
+        "language": { "$ref": "#/$defs/Locale" }
+      }
+    },
+    "RetrievedEvidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "score", "matched_reasons"],
+      "properties": {
+        "evidence_id": { "$ref": "#/$defs/Uuid" },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "matched_reasons": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    "RetrievedEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "unused"],
+      "description": "used is the evidence actually admitted into the generation prompt; unused is everything else the Retriever scored this run, kept for transparency and debugging.",
+      "properties": {
+        "used": {
+          "type": "array",
+          "maxItems": 200,
+          "items": { "$ref": "#/$defs/RetrievedEvidenceItem" }
+        },
+        "unused": {
+          "type": "array",
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/RetrievedEvidenceItem" }
+        }
+      }
+    },
+    "ResumeClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "evidence_ids"],
+      "description": "One factual statement in the generated resume. evidence_ids must reference EvidenceRecord.id values present in retrieved_evidence.used; ClaimVerifier rejects any claim without at least one valid reference.",
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Uuid" }
+        }
+      }
+    },
+    "ResumeSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "title", "claims"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "enum": [
+            "summary",
+            "experience",
+            "education",
+            "skill",
+            "certification",
+            "project",
+            "other"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "claims": {
+          "type": "array",
+          "maxItems": 200,
+          "items": { "$ref": "#/$defs/ResumeClaim" }
+        }
+      }
+    },
+    "ResumeDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sections"],
+      "properties": {
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/ResumeSection" }
+        }
+      }
+    },
+    "ResumeGenerationWarning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["evidence_gap", "low_relevance", "pending_confirmation", "degraded"]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "claim_id": { "$ref": "#/$defs/Uuid" },
+        "evidence_ids": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Uuid" }
+        }
+      }
+    },
+    "ResumeGenerationStatus": {
+      "type": "string",
+      "enum": ["pending", "generating", "review_required", "failed"],
+      "description": "MVP has no automatically approved state. review_required is the only successful terminal status; approval happens later through the Materials review gate, out of this contract's scope."
+    },
+    "ResumeGeneration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "user_id",
+        "status",
+        "generator_version",
+        "prompt_version",
+        "resume",
+        "resume_preview_text",
+        "jd_analysis",
+        "retrieved_evidence",
+        "warnings",
+        "created_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "user_id": { "$ref": "#/$defs/Uuid" },
+        "status": { "$ref": "#/$defs/ResumeGenerationStatus" },
+        "generator_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "prompt_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "resume": { "$ref": "#/$defs/ResumeDocument" },
+        "resume_preview_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000
+        },
+        "jd_analysis": { "$ref": "#/$defs/JdAnalysis" },
+        "retrieved_evidence": { "$ref": "#/$defs/RetrievedEvidence" },
+        "warnings": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/ResumeGenerationWarning" }
+        },
+        "created_at": { "$ref": "#/$defs/Timestamp" }
       }
     }
   }

@@ -40,7 +40,8 @@
         "interview.changed.v1",
         "analytics.metric_recorded.v1",
         "authorization.revoked.v1",
-        "audit.action_recorded.v1"
+        "audit.action_recorded.v1",
+        "resume_generation.state_changed.v1"
       ]
     },
     "source": {
@@ -94,7 +95,8 @@
               "agent.status_changed.v1",
               "task.state_changed.v1",
               "interview.changed.v1",
-              "authorization.revoked.v1"
+              "authorization.revoked.v1",
+              "resume_generation.state_changed.v1"
             ]
           }
         }
@@ -234,7 +236,8 @@
             "task",
             "notification",
             "interview",
-            "metric"
+            "metric",
+            "resume_generation"
           ]
         },
         "id": {

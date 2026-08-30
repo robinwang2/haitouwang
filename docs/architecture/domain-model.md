@@ -8,21 +8,22 @@ MVP 是共享基础设施上的多用户 SaaS，每个用户构成逻辑数据�
 
 ## 2. 聚合目录
 
-| 聚合      | 聚合根与关键字段                                                                                                  | 关系/不变量                                                                                                        |
-| --------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| 用户      | `User{id,email,display_name,locale,time_zone,status,version}`                                                     | 拥有目标、事实、材料、申请、代理和通知设置；`email` 仅在用户资源和受控身份域出现                                   |
-| 求职目标  | `Goal{id,user_id,title_keywords,locations,employment_types,salary,work_authorization_rule,status}`                | 一个用户可有多个目标；地区/语言未决时 `locale` 可选，不推断法域                                                    |
-| 事实      | `Fact{id,user_id,kind,value,scope,status,valid_from,valid_until,source,confirmed_at,version}`                     | `pending_confirmation`、`expired`、`prohibited`、越目标范围或已撤销事实不得用于匹配/生成；值保持结构化并可追溯来源 |
-| 文件/材料 | `FileMetadata` 与 `Material{id,user_id,job_id,kind,status,version,file_ids,fact_citations}`                       | 文件元数据不包含文件正文或签名 URL；每个发布材料陈述必须引用允许事实；已批准版本不可原地覆写                       |
-| 职位      | `Job{id,canonical_url,source,source_refs,title,company,location,employment_type,description_status,risk,status}`  | 多来源归并为一条主记录，官网来源优先；风险/过期/关键字段缺失可强制人工处理                                         |
-| 评分      | `Score{id,user_id,goal_id,job_id,total,dimensions,hard_gates,decision,explanations,input_version}`                | 硬门优先于总分；维度权重固定为 25/20/15/15/10/10/5，合计 100；结果对同一输入版本确定                               |
-| 评审      | `Review{id,user_id,job_id,material_ids,material_versions,status,reviewers,findings,recommendation,round}`         | `material_versions` 固定被评审材料版本；存在未关闭 `must_fix` 时不得批准；生成器和评审器配置隔离                   |
-| 本地代理  | `Agent{id,user_id,device_name,public_key_thumbprint,status,scopes,last_seen_at,version}`                          | 不保存目标站点秘密；授权绑定用户、设备、公钥、受众和范围；撤权不可逆地阻止新命令                                   |
-| 申请      | `Application{id,user_id,job_id,goal_id,material_ids,status,submission_idempotency_key,evidence,timeline,version}` | 一个用户对同一职位/目标的提交键唯一；没有可验证证据不得进入 `submitted`；MVP 提交前必须人工确认                    |
-| 任务      | `Task{id,user_id,type,status,resource,attempt,lease,manual_reason,result_ref}`                                    | 租约绑定代理和 nonce；相同命令/回执幂等；人工任务不得由自动重试解除                                                |
-| 通知      | `Notification{id,user_id,type,status,dedupe_key,channel,scheduled_at,source_ref}`                                 | `(user_id,type,dedupe_key)` 唯一；载荷只含摘要和资源引用，不含材料/邮件正文                                        |
-| 面试      | `Interview{id,user_id,application_id,round,status,start_at,end_at,time_zone,meeting_uri,source}`                  | 跨时区以 UTC 时间加 IANA 时区保存；邮件低置信结果仅创建 `tentative`，需用户确认                                    |
-| 分析      | `MetricDefinition` 与 `MetricPoint`                                                                               | 指标定义版本化并列出源字段、去重和时区口径；显示样本量，不输出因果结论                                             |
+| 聚合      | 聚合根与关键字段                                                                                                                                     | 关系/不变量                                                                                                                                                                                                                    |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 用户      | `User{id,email,display_name,locale,time_zone,status,version}`                                                                                        | 拥有目标、事实、材料、申请、代理和通知设置；`email` 仅在用户资源和受控身份域出现                                                                                                                                               |
+| 求职目标  | `Goal{id,user_id,title_keywords,locations,employment_types,salary,work_authorization_rule,status}`                                                   | 一个用户可有多个目标；地区/语言未决时 `locale` 可选，不推断法域                                                                                                                                                                |
+| 事实      | `Fact{id,user_id,kind,value,scope,status,valid_from,valid_until,source,confirmed_at,version}`                                                        | `pending_confirmation`、`expired`、`prohibited`、越目标范围或已撤销事实不得用于匹配/生成；值保持结构化并可追溯来源                                                                                                             |
+| 文件/材料 | `FileMetadata` 与 `Material{id,user_id,job_id,kind,status,version,file_ids,fact_citations}`                                                          | 文件元数据不包含文件正文或签名 URL；每个发布材料陈述必须引用允许事实；已批准版本不可原地覆写                                                                                                                                   |
+| 职位      | `Job{id,canonical_url,source,source_refs,title,company,location,employment_type,description_status,risk,status}`                                     | 多来源归并为一条主记录，官网来源优先；风险/过期/关键字段缺失可强制人工处理                                                                                                                                                     |
+| 评分      | `Score{id,user_id,goal_id,job_id,total,dimensions,hard_gates,decision,explanations,input_version}`                                                   | 硬门优先于总分；维度权重固定为 25/20/15/15/10/10/5，合计 100；结果对同一输入版本确定                                                                                                                                           |
+| 评审      | `Review{id,user_id,job_id,material_ids,material_versions,status,reviewers,findings,recommendation,round}`                                            | `material_versions` 固定被评审材料版本；存在未关闭 `must_fix` 时不得批准；生成器和评审器配置隔离                                                                                                                               |
+| 本地代理  | `Agent{id,user_id,device_name,public_key_thumbprint,status,scopes,last_seen_at,version}`                                                             | 不保存目标站点秘密；授权绑定用户、设备、公钥、受众和范围；撤权不可逆地阻止新命令                                                                                                                                               |
+| 申请      | `Application{id,user_id,job_id,goal_id,material_ids,status,submission_idempotency_key,evidence,timeline,version}`                                    | 一个用户对同一职位/目标的提交键唯一；没有可验证证据不得进入 `submitted`；MVP 提交前必须人工确认                                                                                                                                |
+| 任务      | `Task{id,user_id,type,status,resource,attempt,lease,manual_reason,result_ref}`                                                                       | 租约绑定代理和 nonce；相同命令/回执幂等；人工任务不得由自动重试解除                                                                                                                                                            |
+| 通知      | `Notification{id,user_id,type,status,dedupe_key,channel,scheduled_at,source_ref}`                                                                    | `(user_id,type,dedupe_key)` 唯一；载荷只含摘要和资源引用，不含材料/邮件正文                                                                                                                                                    |
+| 面试      | `Interview{id,user_id,application_id,round,status,start_at,end_at,time_zone,meeting_uri,source}`                                                     | 跨时区以 UTC 时间加 IANA 时区保存；邮件低置信结果仅创建 `tentative`，需用户确认                                                                                                                                                |
+| 分析      | `MetricDefinition` 与 `MetricPoint`                                                                                                                  | 指标定义版本化并列出源字段、去重和时区口径；显示样本量，不输出因果结论                                                                                                                                                         |
+| 简历生成  | `ResumeGeneration{id,user_id,status,generator_version,prompt_version,resume,resume_preview_text,jd_analysis,retrieved_evidence,warnings,created_at}` | 只使用 `RagRecordMapper` 产出的 `EvidenceRecord[]`，不直接依赖外部 JSON 字段；每条 `resume.sections[].claims[]` 至少引用一个 `evidence_ids`；`status` 不存在自动批准态，详见 `docs/architecture/resume-generation-contract.md` |
 
 机器字段的完整约束见 `contracts/schemas/domain.schema.json`。
 
@@ -41,7 +42,11 @@ Job ─ Score
  ├─ Material
  ├─ Review
  └─ Application
+
+User ─ ResumeGeneration (reads EvidenceRecord[] mapped from a JSON RagSource, not Fact)
 ```
+
+`ResumeGeneration` 在本契约层与 `Fact`/`Material` 聚合刻意解耦：MVP 的证据来自 `RagRecordMapper` 映射出的 `EvidenceRecord[]`，不是既有的 `Fact` 事实库；把生成结果落成正式 `Material` 版本是后续工单（`resume_generation_orchestrator`）的范围。
 
 `Review` 读取材料与事实引用但不能把 AI 输出直接写为已确认事实。`Application` 只引用已批准材料；人工任务包可引用材料、答案、风险和未决项，但不得嵌入目标网站秘密。分析从版本化事件/源记录派生，不反向修改业务聚合。
 

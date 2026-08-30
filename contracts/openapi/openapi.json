@@ -26,6 +26,10 @@
     { "name": "Goals", "description": "Job-search goals and constraints." },
     { "name": "Facts", "description": "Versioned, scoped and attributable user facts." },
     { "name": "Materials", "description": "Resumes, letters, answers and their fact citations." },
+    {
+      "name": "ResumeGenerations",
+      "description": "JD-tailored resume generation from a JSON RAG source, with fact citations and review-required output."
+    },
     { "name": "Jobs", "description": "Imported, normalized, deduplicated and risk-assessed jobs." },
     { "name": "Scores", "description": "Deterministic match dimensions and hard gates." },
     { "name": "Reviews", "description": "Independent material and application reviews." },
@@ -327,6 +331,217 @@
           "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "$ref": "#/components/responses/Conflict" },
+          "default": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/v1/resume-generations": {
+      "post": {
+        "tags": ["ResumeGenerations"],
+        "operationId": "createResumeGeneration",
+        "summary": "Generate a JD-tailored resume from retrieved personal evidence",
+        "description": "Loads rag_source through RagSource -> RagRecordMapper into EvidenceRecord[], analyzes jd_text, retrieves the Top-K evidence, generates a structured resume constrained to that evidence, and runs claim verification before returning. Every fact-bearing claim carries evidence_ids. The result is always review_required or a rejected/failed error; this endpoint never auto-approves or submits.",
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CorrelationId" }
+        ],
+        "x-idempotency": "required; the Idempotency-Key header guards transport-level retries, the request body idempotency_key is the business dedupe key scoped to (authenticated user, jd_text, rag_source, preferences) and replays the first generation instead of calling the model again",
+        "x-audit-event": "resume_generation.created_or_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateResumeGenerationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Generation attempt completed; status is review_required on success and never an auto-approved state",
+            "headers": {
+              "Idempotency-Replayed": { "$ref": "#/components/headers/IdempotencyReplayed" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ResumeGeneration" },
+                "examples": {
+                  "success": {
+                    "summary": "Resume generated with every claim cited to used evidence",
+                    "value": {
+                      "id": "a0000000-0000-4000-8000-000000000001",
+                      "user_id": "10000000-0000-4000-8000-000000000001",
+                      "status": "review_required",
+                      "generator_version": "resume-generator@2026-08-30.1",
+                      "prompt_version": "resume-prompt@3",
+                      "resume": {
+                        "sections": [
+                          {
+                            "key": "experience",
+                            "title": "Experience",
+                            "claims": [
+                              {
+                                "id": "b0000000-0000-4000-8000-000000000001",
+                                "text": "Led migration of the checkout service to an event-driven architecture, cutting P95 latency by 35%.",
+                                "evidence_ids": ["c0000000-0000-4000-8000-000000000001"]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "resume_preview_text": "Experience\n- Led migration of the checkout service to an event-driven architecture, cutting P95 latency by 35%.",
+                      "jd_analysis": {
+                        "job_title": "Senior Backend Engineer",
+                        "responsibilities": [
+                          {
+                            "text": "Own reliability of checkout and payments services",
+                            "source_excerpt": "You will own the reliability of our checkout and payments services."
+                          }
+                        ],
+                        "must_have_requirements": [
+                          {
+                            "text": "5+ years building distributed backend systems",
+                            "source_excerpt": "5+ years of experience building distributed backend systems."
+                          }
+                        ],
+                        "nice_to_have_requirements": [],
+                        "keywords": [
+                          {
+                            "text": "event-driven architecture",
+                            "category": "technical",
+                            "source_excerpt": "experience with event-driven architecture is a plus"
+                          }
+                        ],
+                        "seniority_level": "senior",
+                        "language": "en-US"
+                      },
+                      "retrieved_evidence": {
+                        "used": [
+                          {
+                            "evidence_id": "c0000000-0000-4000-8000-000000000001",
+                            "score": 0.92,
+                            "matched_reasons": ["keyword:event-driven architecture", "tag:checkout"]
+                          }
+                        ],
+                        "unused": [
+                          {
+                            "evidence_id": "c0000000-0000-4000-8000-000000000002",
+                            "score": 0.18,
+                            "matched_reasons": ["tag:internship"]
+                          }
+                        ]
+                      },
+                      "warnings": [],
+                      "created_at": "2026-08-30T18:20:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed RAG source JSON, an empty JD or a JD over the configured length limit",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "examples": {
+                  "rag_source_invalid": {
+                    "summary": "Uploaded RAG source is not valid JSON",
+                    "value": {
+                      "error": {
+                        "code": "RAG_SOURCE_INVALID",
+                        "message": "The RAG source could not be parsed as JSON.",
+                        "retryable": false
+                      },
+                      "request_id": "40000000-0000-4000-8000-000000000013",
+                      "correlation_id": "40000000-0000-4000-8000-000000000013"
+                    }
+                  },
+                  "jd_text_empty": {
+                    "summary": "JD text is blank or whitespace-only",
+                    "value": {
+                      "error": {
+                        "code": "JD_TEXT_EMPTY",
+                        "message": "jd_text must contain non-whitespace job description content.",
+                        "retryable": false
+                      },
+                      "request_id": "40000000-0000-4000-8000-000000000014",
+                      "correlation_id": "40000000-0000-4000-8000-000000000014"
+                    }
+                  },
+                  "jd_text_too_long": {
+                    "summary": "JD text exceeds the configured business length limit",
+                    "value": {
+                      "error": {
+                        "code": "JD_TEXT_TOO_LONG",
+                        "message": "jd_text exceeds the maximum accepted length.",
+                        "retryable": false
+                      },
+                      "request_id": "40000000-0000-4000-8000-000000000015",
+                      "correlation_id": "40000000-0000-4000-8000-000000000015"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "422": {
+            "description": "Request was well-formed but generation cannot be trusted: no relevant evidence was retrieved, or claim verification rejected the draft",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "examples": {
+                  "evidence_not_found": {
+                    "summary": "No RAG evidence scored above the relevance floor for this JD",
+                    "value": {
+                      "error": {
+                        "code": "RESUME_EVIDENCE_NOT_FOUND",
+                        "message": "No relevant evidence was retrieved for this job description.",
+                        "retryable": false
+                      },
+                      "request_id": "40000000-0000-4000-8000-000000000016",
+                      "correlation_id": "40000000-0000-4000-8000-000000000016"
+                    }
+                  },
+                  "claim_verification_failed": {
+                    "summary": "A generated claim had no valid evidence citation",
+                    "value": {
+                      "error": {
+                        "code": "RESUME_CLAIM_VERIFICATION_FAILED",
+                        "message": "One or more resume claims failed fact verification and were blocked from review_required.",
+                        "retryable": false
+                      },
+                      "request_id": "40000000-0000-4000-8000-000000000017",
+                      "correlation_id": "40000000-0000-4000-8000-000000000017"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The model provider call failed or returned an unusable structured result",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "examples": {
+                  "model_failed": {
+                    "summary": "Model provider timed out after retries",
+                    "value": {
+                      "error": {
+                        "code": "RESUME_GENERATION_FAILED",
+                        "message": "The resume generation model call failed.",
+                        "retryable": true
+                      },
+                      "request_id": "40000000-0000-4000-8000-000000000018",
+                      "correlation_id": "40000000-0000-4000-8000-000000000018"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "default": { "$ref": "#/components/responses/Error" }
         }
       }
@@ -1470,6 +1685,8 @@
       "MetricDefinition": { "$ref": "../schemas/domain.schema.json#/$defs/MetricDefinition" },
       "MetricPoint": { "$ref": "../schemas/domain.schema.json#/$defs/MetricPoint" },
       "AuditEvent": { "$ref": "../schemas/domain.schema.json#/$defs/AuditEvent" },
+      "ResumeGeneration": { "$ref": "../schemas/domain.schema.json#/$defs/ResumeGeneration" },
+      "Locale": { "$ref": "../schemas/domain.schema.json#/$defs/Locale" },
       "PageMeta": { "$ref": "../schemas/domain.schema.json#/$defs/PageMeta" },
       "ErrorEnvelope": { "$ref": "../schemas/domain.schema.json#/$defs/ErrorEnvelope" },
       "GoalPage": {
@@ -1803,6 +2020,83 @@
           "expected_version": {
             "type": "integer",
             "minimum": 1
+          }
+        }
+      },
+      "RagSourceUpload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "upload_reference"],
+        "description": "References a JSON RAG file the caller uploaded through the platform's upload mechanism; never a server file system path.",
+        "properties": {
+          "type": { "const": "uploaded_file" },
+          "upload_reference": { "$ref": "#/components/schemas/Uuid" }
+        }
+      },
+      "RagSourceFixture": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "fixture_ref"],
+        "description": "References one of the server-configured test fixtures managed by the resume_mvp_fixtures task; fixture_ref is an opaque identifier, not a path.",
+        "properties": {
+          "type": { "const": "server_fixture" },
+          "fixture_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+          }
+        }
+      },
+      "RagSource": {
+        "description": "The MVP JSON RAG data source: an uploaded file or a server-configured fixture reference. Arbitrary server file paths and free-form path strings are structurally rejected; the upstream JSON format itself remains provisional (see docs/architecture/resume-generation-contract.md).",
+        "oneOf": [
+          { "$ref": "#/components/schemas/RagSourceUpload" },
+          { "$ref": "#/components/schemas/RagSourceFixture" }
+        ]
+      },
+      "ResumeGenerationPreferences": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "language": { "$ref": "#/components/schemas/Locale" },
+          "length": {
+            "type": "string",
+            "enum": ["concise", "standard", "detailed"]
+          },
+          "target_seniority": {
+            "type": "string",
+            "enum": [
+              "intern",
+              "entry",
+              "mid",
+              "senior",
+              "staff",
+              "principal",
+              "executive",
+              "unknown"
+            ]
+          }
+        }
+      },
+      "CreateResumeGenerationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["jd_text", "rag_source", "idempotency_key"],
+        "properties": {
+          "jd_text": {
+            "type": "string",
+            "maxLength": 200000,
+            "description": "Required raw JD text. Intentionally has no minLength here: whitespace-only or over-the-business-limit text still reaches JdAnalyzer's validation so the response carries the specific JD_TEXT_EMPTY or JD_TEXT_TOO_LONG error code instead of a generic VALIDATION_FAILED. The 200000-character bound is only a hard payload ceiling, not the business threshold."
+          },
+          "rag_source": { "$ref": "#/components/schemas/RagSource" },
+          "preferences": { "$ref": "#/components/schemas/ResumeGenerationPreferences" },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 128,
+            "pattern": "^[\\x21-\\x7E]+$",
+            "description": "Business-level dedupe key for this generation intent, independent of the transport-level Idempotency-Key header."
           }
         }
       },
