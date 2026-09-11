@@ -7,9 +7,9 @@
     "start": "node --enable-source-maps dist/index.js"
   },
   "dependencies": {
-    "playwright": "1.62.1"
+    "playwright": "1.63.0"
   },
   "devDependencies": {
-    "@types/node": "26.1.2"
+    "@types/node": "26.5.0"
   }
 }
